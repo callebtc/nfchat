@@ -81,6 +81,10 @@ class MainActivity : Activity(), ReaderCallback {
         // Set up NFC foreground dispatch system
         setupForegroundDispatch()
 
+        // Disable send button initially
+        btnSendMode.isEnabled = false
+        findViewById<ImageView>(R.id.ivSendIcon).alpha = 0.5f
+
         // Add text watcher to enable/disable send button
         etMessage.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -216,8 +220,8 @@ class MainActivity : Activity(), ReaderCallback {
         CardEmulationService.instance?.onDataReceivedListener = { receivedData ->
             Log.d(TAG, "Data received in MainActivity: $receivedData")
             
-            // Check if this is a duplicate message
-            if (receivedData != lastReceivedMessage) {
+            // Check if this is a duplicate message or empty
+            if (receivedData.isNotBlank() && receivedData != lastReceivedMessage) {
                 lastReceivedMessage = receivedData
                 
                 mainHandler.post {
@@ -230,7 +234,7 @@ class MainActivity : Activity(), ReaderCallback {
                     vibrate(200)
                 }
             } else {
-                Log.d(TAG, "Duplicate message received, ignoring: $receivedData")
+                Log.d(TAG, "Empty or duplicate message received, ignoring: $receivedData")
             }
         }
     }
@@ -352,8 +356,8 @@ class MainActivity : Activity(), ReaderCallback {
                     val dataBytes = getResult.copyOfRange(0, getResult.size - 2)
                     val receivedMessage = String(dataBytes, Charset.forName("UTF-8"))
                     
-                    // Check if this is a duplicate message
-                    if (receivedMessage != lastReceivedMessage) {
+                    // Check if this is a duplicate message or empty
+                    if (receivedMessage.isNotBlank() && receivedMessage != lastReceivedMessage) {
                         lastReceivedMessage = receivedMessage
                         
                         runOnUiThread {
@@ -365,7 +369,7 @@ class MainActivity : Activity(), ReaderCallback {
                             vibrate(200)
                         }
                     } else {
-                        Log.d(TAG, "Duplicate message received, ignoring: $receivedMessage")
+                        Log.d(TAG, "Empty or duplicate message received, ignoring: $receivedMessage")
                     }
                 }
             }

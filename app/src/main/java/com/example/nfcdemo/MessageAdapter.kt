@@ -14,83 +14,77 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class MessageAdapter(private val context: Context) : 
-    RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-    
+class MessageAdapter(private val context: Context) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+
     companion object {
         private const val VIEW_TYPE_SENT = 1
         private const val VIEW_TYPE_RECEIVED = 2
     }
-    
+
     data class Message(
-        val content: String, 
+        val content: String,
         val isSent: Boolean,
         var isDelivered: Boolean = false,
         val timestamp: Date = Date()
     )
-    
+
     private val messages = mutableListOf<Message>()
-    
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        return if (viewType == VIEW_TYPE_SENT) {
+            val view = LayoutInflater.from(context).inflate(R.layout.item_message_sent, parent, false)
+            SentMessageViewHolder(view)
+        } else {
+            val view = LayoutInflater.from(context).inflate(R.layout.item_message_received, parent, false)
+            ReceivedMessageViewHolder(view)
+        }
+    }
+
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        val message = messages[position]
+        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val timeString = timeFormat.format(message.timestamp)
+        
+        if (message.isSent) {
+            val sentHolder = holder as SentMessageViewHolder
+            sentHolder.bind(message)
+            sentHolder.timestamp.text = timeString
+        } else {
+            val receivedHolder = holder as ReceivedMessageViewHolder
+            receivedHolder.bind(message.content)
+            receivedHolder.timestamp.text = timeString
+        }
+    }
+
+    override fun getItemCount(): Int = messages.size
+
+    override fun getItemViewType(position: Int): Int {
+        return if (messages[position].isSent) VIEW_TYPE_SENT else VIEW_TYPE_RECEIVED
+    }
+
     fun addSentMessage(message: String): Int {
+        if (message.isBlank()) return -1
+        
         val position = messages.size
         messages.add(Message(message, true, false, Date()))
         notifyItemInserted(position)
         return position
     }
-    
+
+    fun addReceivedMessage(message: String) {
+        if (message.isBlank()) return
+        
+        messages.add(Message(message, false, false, Date()))
+        notifyItemInserted(messages.size - 1)
+    }
+
     fun markMessageAsDelivered(position: Int) {
         if (position >= 0 && position < messages.size && messages[position].isSent) {
             messages[position].isDelivered = true
             notifyItemChanged(position)
         }
     }
-    
-    fun addReceivedMessage(message: String) {
-        messages.add(Message(message, false, false, Date()))
-        notifyItemInserted(messages.size - 1)
-    }
-    
-    override fun getItemViewType(position: Int): Int {
-        return if (messages[position].isSent) VIEW_TYPE_SENT else VIEW_TYPE_RECEIVED
-    }
-    
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-        return when (viewType) {
-            VIEW_TYPE_SENT -> {
-                val view = LayoutInflater.from(parent.context)
-                    .inflate(R.layout.item_message_sent, parent, false)
-                SentMessageViewHolder(view)
-            }
-            else -> {
-                val view = LayoutInflater.from(parent.context)
-                    .inflate(R.layout.item_message_received, parent, false)
-                ReceivedMessageViewHolder(view)
-            }
-        }
-    }
-    
-    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        val message = messages[position]
-        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val timeString = timeFormat.format(message.timestamp)
-        
-        when (holder) {
-            is SentMessageViewHolder -> {
-                val sentHolder = holder as SentMessageViewHolder
-                sentHolder.messageText.text = message.content
-                sentHolder.sentCheck.visibility = if (message.isDelivered) View.VISIBLE else View.GONE
-                sentHolder.timestamp.text = timeString
-            }
-            is ReceivedMessageViewHolder -> {
-                val receivedHolder = holder as ReceivedMessageViewHolder
-                receivedHolder.messageText.text = message.content
-                receivedHolder.timestamp.text = timeString
-            }
-        }
-    }
-    
-    override fun getItemCount(): Int = messages.size
-    
+
     inner class SentMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val messageText: TextView = itemView.findViewById(R.id.tvMessageContent)
         val sentCheck: ImageView = itemView.findViewById(R.id.ivSentCheck)

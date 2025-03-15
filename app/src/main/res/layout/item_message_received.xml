@@ -20,8 +20,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/text_primary_dark"
-            android:textSize="14sp"
-            android:fontFamily="monospace"/>
+            android:textSize="14sp"/>
             
         <TextView
             android:id="@+id/tvTimestamp"
