@@ -1,25 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Light Theme Colors -->
-    <color name="primary">#3F51B5</color>
-    <color name="primary_dark">#303F9F</color>
-    <color name="primary_darker">#1A237E</color>
-    <color name="accent">#FF4081</color>
-    <color name="accent_light">#FF80AB</color>
+    <!-- Monochromatic Theme Colors -->
+    <color name="primary">#212121</color>
+    <color name="primary_dark">#121212</color>
+    <color name="primary_darker">#000000</color>
+    <color name="accent">#FFFFFF</color>
+    <color name="accent_light">#E0E0E0</color>
     
-    <color name="background_light">#FAFAFA</color>
-    <color name="card_background_light">#FFFFFF</color>
-    <color name="text_primary_light">#212121</color>
-    <color name="text_secondary_light">#757575</color>
-    
-    <!-- Dark Theme Colors -->
     <color name="background_dark">#121212</color>
     <color name="card_background_dark">#1E1E1E</color>
     <color name="text_primary_dark">#FFFFFF</color>
     <color name="text_secondary_dark">#B3FFFFFF</color> <!-- 70% white -->
     
     <!-- Mode Indicator Colors -->
-    <color name="send_mode_active">#4CAF50</color>
-    <color name="receive_mode_active">#2196F3</color>
-    <color name="mode_inactive">#757575</color>
+    <color name="send_mode_active">#FFFFFF</color>
+    <color name="receive_mode_active">#FFFFFF</color>
+    <color name="mode_inactive">#424242</color>
+    
+    <!-- Border Colors -->
+    <color name="border_light">#424242</color>
 </resources>

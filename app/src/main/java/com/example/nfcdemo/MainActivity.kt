@@ -1,6 +1,8 @@
 package com.example.nfcdemo
 
 import android.app.Activity
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.nfc.NfcAdapter
 import android.nfc.NfcAdapter.ReaderCallback
@@ -11,10 +13,13 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import java.io.IOException
 import java.nio.charset.Charset
 
@@ -25,10 +30,12 @@ class MainActivity : Activity(), ReaderCallback {
     
     private var nfcAdapter: NfcAdapter? = null
     private lateinit var etMessage: EditText
-    private lateinit var tvReceived: TextView
     private lateinit var tvStatus: TextView
-    private lateinit var btnSendMode: Button
-    private lateinit var btnReceiveMode: Button
+    private lateinit var btnSendMode: LinearLayout
+    private lateinit var btnReceiveMode: LinearLayout
+    private lateinit var btnPaste: ImageButton
+    private lateinit var rvMessages: RecyclerView
+    private lateinit var messageAdapter: MessageAdapter
     
     private var isInSendMode = false
     private var isInReceiveMode = false
@@ -38,10 +45,16 @@ class MainActivity : Activity(), ReaderCallback {
         setContentView(R.layout.activity_main)
 
         etMessage = findViewById(R.id.etMessage)
-        tvReceived = findViewById(R.id.tvReceived)
         tvStatus = findViewById(R.id.tvStatus)
         btnSendMode = findViewById(R.id.btnSendMode)
         btnReceiveMode = findViewById(R.id.btnReceiveMode)
+        btnPaste = findViewById(R.id.btnPaste)
+        rvMessages = findViewById(R.id.rvMessages)
+        
+        // Set up RecyclerView
+        messageAdapter = MessageAdapter(this)
+        rvMessages.layoutManager = LinearLayoutManager(this)
+        rvMessages.adapter = messageAdapter
 
         // Initialize NFC
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
@@ -86,9 +99,20 @@ class MainActivity : Activity(), ReaderCallback {
             
             // Set up the message and listener
             CardEmulationService.instance?.messageToShare = etMessage.text.toString()
-            
-            // Set up a global data receiver that will update the UI
             setupDataReceiver()
+        }
+        
+        // Set up paste button
+        btnPaste.setOnClickListener {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            if (clipboard.hasPrimaryClip() && clipboard.primaryClip?.itemCount ?: 0 > 0) {
+                val item = clipboard.primaryClip?.getItemAt(0)
+                val pasteText = item?.text.toString()
+                etMessage.setText(pasteText)
+                Toast.makeText(this, "Text pasted from clipboard", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Nothing to paste", Toast.LENGTH_SHORT).show()
+            }
         }
     }
     
@@ -98,7 +122,7 @@ class MainActivity : Activity(), ReaderCallback {
             Log.d(TAG, "Data received in MainActivity: $receivedData")
             mainHandler.post {
                 // Update UI on the main thread
-                tvReceived.text = receivedData
+                messageAdapter.addMessage(receivedData)
                 tvStatus.text = getString(R.string.message_received)
                 Toast.makeText(this, "Message received: $receivedData", Toast.LENGTH_SHORT).show()
             }
@@ -197,7 +221,7 @@ class MainActivity : Activity(), ReaderCallback {
                     val receivedMessage = String(dataBytes, Charset.forName("UTF-8"))
                     
                     runOnUiThread {
-                        tvReceived.text = receivedMessage
+                        messageAdapter.addMessage(receivedMessage)
                         tvStatus.text = getString(R.string.message_received)
                         Toast.makeText(this, "Message received!", Toast.LENGTH_SHORT).show()
                     }

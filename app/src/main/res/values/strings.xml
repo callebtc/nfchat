@@ -1,19 +1,20 @@
 <resources>
     <string name="app_name">NFC Demo</string>
-    <string name="title_nfc_transfer">NFC Data Transfer (HCE)</string>
+    <string name="title_nfc_transfer">NFC Data Transfer</string>
     <string name="hint_enter_message">Enter message to send:</string>
-    <string name="hint_message_input">Type your message here</string>
-    <string name="btn_send_mode">Send Mode</string>
-    <string name="btn_receive_mode">Receive Mode (Card Emulation)</string>
-    <string name="status_select_mode">Select a mode to begin</string>
-    <string name="label_received_message">Received message:</string>
-    <string name="no_message_received">No message received yet</string>
-    <string name="status_send_mode">Send Mode: Tap your phone to another device in Receive Mode</string>
-    <string name="status_receive_mode">Receive Mode: Ready to receive messages (emulating NFC card)</string>
-    <string name="nfc_not_available">NFC not available on this device</string>
+    <string name="hint_message_placeholder">Type your message here</string>
+    <string name="btn_send">Send</string>
+    <string name="btn_receive">Receive</string>
+    <string name="label_received_messages">Received Messages</string>
+    <string name="status_idle">Ready to transfer data</string>
+    <string name="status_send_mode">Send Mode: Tap to another device</string>
+    <string name="status_receive_mode">Receive Mode: Waiting for data</string>
     <string name="message_sent">Message sent successfully!</string>
-    <string name="message_send_failed">Failed to send message. Try again.</string>
-    <string name="enter_message_prompt">Please enter a message to send</string>
+    <string name="message_send_failed">Failed to send message</string>
     <string name="message_received">Message received successfully!</string>
+    <string name="no_message_received">No messages received yet</string>
+    <string name="nfc_not_available">NFC is not available on this device</string>
+    <string name="enter_message_prompt">Please enter a message to send</string>
     <string name="tag_no_message">NFC tag detected but no message found</string>
+    <string name="message_copied">Message copied to clipboard</string>
 </resources>
