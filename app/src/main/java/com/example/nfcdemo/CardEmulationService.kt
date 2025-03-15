@@ -4,6 +4,7 @@ import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
 import android.util.Log
 import java.nio.charset.Charset
+import org.json.JSONObject
 
 class CardEmulationService : HostApduService() {
     
@@ -119,7 +120,18 @@ class CardEmulationService : HostApduService() {
         // Handle GET_DATA command
         if (commandString == CMD_GET_DATA) {
             Log.d(TAG, "GET_DATA command received, sending: $messageToShare")
-            val dataBytes = messageToShare.toByteArray(Charset.forName("UTF-8"))
+            
+            // Create a MessageData object with the message content and a unique ID
+            val jsonMessage = try {
+                val messageData = MessageData(messageToShare)
+                messageData.toJson()
+            } catch (e: Exception) {
+                // Fallback to plain text if JSON creation fails
+                Log.e(TAG, "Error creating JSON message: ${e.message}")
+                messageToShare
+            }
+            
+            val dataBytes = jsonMessage.toByteArray(Charset.forName("UTF-8"))
             return concatArrays(dataBytes, SELECT_OK_SW)
         }
         

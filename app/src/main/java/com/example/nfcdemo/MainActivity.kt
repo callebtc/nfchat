@@ -34,6 +34,8 @@ import com.example.nfcdemo.data.MessageDbHelper
 import com.example.nfcdemo.data.SettingsContract
 import java.nio.charset.Charset
 import java.io.IOException
+import org.json.JSONObject
+import java.util.UUID
 
 class MainActivity : Activity(), ReaderCallback {
 
@@ -52,7 +54,7 @@ class MainActivity : Activity(), ReaderCallback {
     private var isInSendMode = false
     private var isInReceiveMode = false
     private var lastSentMessage = ""
-    private var lastReceivedMessage = ""
+    private var lastReceivedMessageId = "" // Track the ID of the last received message
     
     // Default message length limit before truncation
     private var messageLengthLimit = 200
@@ -377,28 +379,56 @@ class MainActivity : Activity(), ReaderCallback {
         CardEmulationService.instance?.onDataReceivedListener = { receivedData ->
             Log.d(TAG, "Data received in MainActivity: $receivedData")
             
-            // Check if this is a duplicate message or empty
-            if (receivedData.isNotBlank() && receivedData != lastReceivedMessage) {
-                lastReceivedMessage = receivedData
-                
-                mainHandler.post {
-                    // Update UI on the main thread and save to database
-                    saveAndAddMessage(receivedData, false)
-                    
-                    // Show "Ready to receive" status instead of "Message received"
-                    tvStatus.text = getString(R.string.status_receive_mode)
-                    
-                    // Vibrate on message received
-                    vibrate(200)
-                    
-                    // Check if auto-open links is enabled
-                    if (dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, true)) {
-                        openLinksInMessage(receivedData)
+            // Check if this is a JSON message with ID
+            if (MessageData.isValidJson(receivedData)) {
+                val messageData = MessageData.fromJson(receivedData)
+                if (messageData != null) {
+                    // Check if this is a duplicate message based on ID
+                    if (messageData.id != lastReceivedMessageId) {
+                        lastReceivedMessageId = messageData.id
+                        
+                        mainHandler.post {
+                            // Update UI on the main thread and save to database
+                            saveAndAddMessage(messageData.content, false)
+                            
+                            // Show "Ready to receive" status instead of "Message received"
+                            tvStatus.text = getString(R.string.status_receive_mode)
+                            
+                            // Vibrate on message received
+                            vibrate(200)
+                            
+                            // Check if auto-open links is enabled
+                            if (dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, true)) {
+                                openLinksInMessage(messageData.content)
+                            }
+                        }
+                    } else {
+                        Log.d(TAG, "Duplicate message received (same ID), ignoring: ${messageData.id}")
                     }
                 }
             } else {
-                Log.d(TAG, "Empty or duplicate message received, ignoring: $receivedData")
-                // No UI updates or vibration for empty/duplicate messages
+                // Legacy format (no ID) - use content-based duplicate detection
+                if (receivedData.isNotBlank() && receivedData != lastReceivedMessageId) {
+                    lastReceivedMessageId = receivedData // Store content as ID for backward compatibility
+                    
+                    mainHandler.post {
+                        // Update UI on the main thread and save to database
+                        saveAndAddMessage(receivedData, false)
+                        
+                        // Show "Ready to receive" status instead of "Message received"
+                        tvStatus.text = getString(R.string.status_receive_mode)
+                        
+                        // Vibrate on message received
+                        vibrate(200)
+                        
+                        // Check if auto-open links is enabled
+                        if (dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, true)) {
+                            openLinksInMessage(receivedData)
+                        }
+                    }
+                } else {
+                    Log.d(TAG, "Empty or duplicate message received, ignoring: $receivedData")
+                }
             }
         }
         
@@ -603,26 +633,54 @@ class MainActivity : Activity(), ReaderCallback {
                     val dataBytes = getResult.copyOfRange(0, getResult.size - 2)
                     val receivedMessage = String(dataBytes, Charset.forName("UTF-8"))
                     
-                    // Check if this is a duplicate message or empty
-                    if (receivedMessage.isNotBlank() && receivedMessage != lastReceivedMessage) {
-                        lastReceivedMessage = receivedMessage
-                        
-                        runOnUiThread {
-                            // Add the message to the chat and save to database
-                            saveAndAddMessage(receivedMessage, false)
-                            tvStatus.text = getString(R.string.message_received)
-                            
-                            // Vibrate on message received
-                            vibrate(200)
-                            
-                            // Check if auto-open links is enabled
-                            if (dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, true)) {
-                                openLinksInMessage(receivedMessage)
+                    // Check if this is a JSON message with ID
+                    if (MessageData.isValidJson(receivedMessage)) {
+                        val messageData = MessageData.fromJson(receivedMessage)
+                        if (messageData != null) {
+                            // Check if this is a duplicate message based on ID
+                            if (messageData.id != lastReceivedMessageId) {
+                                lastReceivedMessageId = messageData.id
+                                
+                                runOnUiThread {
+                                    // Add the message to the chat and save to database
+                                    saveAndAddMessage(messageData.content, false)
+                                    tvStatus.text = getString(R.string.message_received)
+                                    
+                                    // Vibrate on message received
+                                    vibrate(200)
+                                    
+                                    // Check if auto-open links is enabled
+                                    if (dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, true)) {
+                                        openLinksInMessage(messageData.content)
+                                    }
+                                }
+                            } else {
+                                Log.d(TAG, "Duplicate message received (same ID), ignoring: ${messageData.id}")
+                                // Don't update UI or vibrate for duplicate messages
                             }
                         }
                     } else {
-                        Log.d(TAG, "Empty or duplicate message received, ignoring: $receivedMessage")
-                        // Don't update UI or vibrate for empty/duplicate messages
+                        // Legacy format (no ID) - use content-based duplicate detection
+                        if (receivedMessage.isNotBlank() && receivedMessage != lastReceivedMessageId) {
+                            lastReceivedMessageId = receivedMessage // Store content as ID for backward compatibility
+                            
+                            runOnUiThread {
+                                // Add the message to the chat and save to database
+                                saveAndAddMessage(receivedMessage, false)
+                                tvStatus.text = getString(R.string.message_received)
+                                
+                                // Vibrate on message received
+                                vibrate(200)
+                                
+                                // Check if auto-open links is enabled
+                                if (dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, true)) {
+                                    openLinksInMessage(receivedMessage)
+                                }
+                            }
+                        } else {
+                            Log.d(TAG, "Empty or duplicate message received, ignoring: $receivedMessage")
+                            // Don't update UI or vibrate for empty/duplicate messages
+                        }
                     }
                 }
             }
@@ -861,7 +919,11 @@ class MainActivity : Activity(), ReaderCallback {
      * Send a regular (non-chunked) message
      */
     private fun sendRegularMessage(isoDep: IsoDep, message: String) {
-        val sendCommand = "SEND_DATA:$message".toByteArray(Charset.forName("UTF-8"))
+        // Create a MessageData object with the message content and a unique ID
+        val messageData = MessageData(message)
+        val jsonMessage = messageData.toJson()
+        
+        val sendCommand = "SEND_DATA:$jsonMessage".toByteArray(Charset.forName("UTF-8"))
         val sendResult = isoDep.transceive(sendCommand)
         
         if (isSuccess(sendResult)) {
@@ -918,14 +980,18 @@ class MainActivity : Activity(), ReaderCallback {
         chunkSendAttempts.clear()
         currentChunkIndex = 0
         
+        // Create a MessageData object with the message content and a unique ID
+        val messageData = MessageData(message)
+        val jsonMessage = messageData.toJson()
+        
         // Split the message into chunks
-        val messageLength = message.length
+        val messageLength = jsonMessage.length
         totalChunks = (messageLength + maxChunkSize - 1) / maxChunkSize // Ceiling division
         
         for (i in 0 until totalChunks) {
             val startIndex = i * maxChunkSize
             val endIndex = minOf(startIndex + maxChunkSize, messageLength)
-            val chunk = message.substring(startIndex, endIndex)
+            val chunk = jsonMessage.substring(startIndex, endIndex)
             chunksToSend.add(chunk)
             chunkSendAttempts[i] = 0
         }
