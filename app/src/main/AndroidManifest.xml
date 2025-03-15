@@ -29,6 +29,12 @@
             </intent-filter>
         </activity>
         
+        <!-- Settings Activity -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        
         <!-- HCE Service -->
         <service android:name=".CardEmulationService"
             android:exported="true"

@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 import android.nfc.NfcAdapter
 import android.nfc.NfcAdapter.ReaderCallback
 import android.nfc.Tag
@@ -21,6 +22,7 @@ import android.os.VibratorManager
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
+import android.util.Patterns
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -28,6 +30,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.nfcdemo.data.MessageDbHelper
+import com.example.nfcdemo.data.SettingsContract
 import java.nio.charset.Charset
 import java.io.IOException
 
@@ -40,8 +44,10 @@ class MainActivity : Activity(), ReaderCallback {
     private lateinit var etMessage: EditText
     private lateinit var tvStatus: TextView
     private lateinit var btnSendMode: LinearLayout
+    private lateinit var btnSettings: ImageView
     private lateinit var rvMessages: RecyclerView
     private lateinit var messageAdapter: MessageAdapter
+    private lateinit var dbHelper: MessageDbHelper
     
     private var isInSendMode = false
     private var isInReceiveMode = false
@@ -60,9 +66,13 @@ class MainActivity : Activity(), ReaderCallback {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Initialize database helper
+        dbHelper = MessageDbHelper(this)
+
         etMessage = findViewById(R.id.etMessage)
         tvStatus = findViewById(R.id.tvStatus)
         btnSendMode = findViewById(R.id.btnSendMode)
+        btnSettings = findViewById(R.id.btnSettings)
         rvMessages = findViewById(R.id.rvMessages)
         
         // Set up RecyclerView
@@ -104,6 +114,32 @@ class MainActivity : Activity(), ReaderCallback {
         })
 
         // Set up button click listeners
+        setupClickListeners()
+        
+        // Start in receive mode by default
+        mainHandler.postDelayed({
+            isInReceiveMode = true
+            isInSendMode = false
+            updateModeIndicators()
+            tvStatus.text = getString(R.string.status_receive_mode)
+            
+            // Start the CardEmulationService
+            val intent = Intent(this, CardEmulationService::class.java)
+            startService(intent)
+            
+            // Set up the message and listener
+            mainHandler.postDelayed({
+                CardEmulationService.instance?.messageToShare = etMessage.text.toString()
+                setupDataReceiver()
+            }, 100)
+        }, 500)
+
+        // Handle incoming share intents
+        handleIncomingShareIntent(intent)
+    }
+    
+    private fun setupClickListeners() {
+        // Send button
         btnSendMode.setOnClickListener {
             if (etMessage.text.toString().isEmpty()) {
                 Toast.makeText(this, getString(R.string.enter_message_prompt), Toast.LENGTH_SHORT).show()
@@ -129,26 +165,11 @@ class MainActivity : Activity(), ReaderCallback {
             enableReaderMode()
         }
         
-        // Start in receive mode by default
-        mainHandler.postDelayed({
-            isInReceiveMode = true
-            isInSendMode = false
-            updateModeIndicators()
-            tvStatus.text = getString(R.string.status_receive_mode)
-            
-            // Start the CardEmulationService
-            val intent = Intent(this, CardEmulationService::class.java)
-            startService(intent)
-            
-            // Set up the message and listener
-            mainHandler.postDelayed({
-                CardEmulationService.instance?.messageToShare = etMessage.text.toString()
-                setupDataReceiver()
-            }, 100)
-        }, 500)
-
-        // Handle incoming share intents
-        handleIncomingShareIntent(intent)
+        // Settings button
+        btnSettings.setOnClickListener {
+            val intent = Intent(this, SettingsActivity::class.java)
+            startActivity(intent)
+        }
     }
     
     /**
@@ -264,10 +285,38 @@ class MainActivity : Activity(), ReaderCallback {
                     
                     // Vibrate on message received
                     vibrate(200)
+                    
+                    // Check if auto-open links is enabled
+                    if (dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, true)) {
+                        openLinksInMessage(receivedData)
+                    }
                 }
             } else {
                 Log.d(TAG, "Empty or duplicate message received, ignoring: $receivedData")
                 // No UI updates or vibration for empty/duplicate messages
+            }
+        }
+    }
+    
+    /**
+     * Automatically open links in a message if auto-open links is enabled
+     */
+    private fun openLinksInMessage(message: String) {
+        // Find URLs in the message
+        val matcher = Patterns.WEB_URL.matcher(message)
+        if (matcher.find()) {
+            val url = matcher.group()
+            if (url != null) {
+                // Prepend http:// if the URL doesn't have a scheme
+                val fullUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    "http://$url"
+                } else {
+                    url
+                }
+                
+                // Open the URL
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
+                startActivity(intent)
             }
         }
     }
@@ -304,6 +353,7 @@ class MainActivity : Activity(), ReaderCallback {
         super.onDestroy()
         // Clean up database resources
         messageAdapter.cleanup()
+        dbHelper.close()
         // If we're not in receive mode anymore, stop the service
         if (!isInReceiveMode) {
             val intent = Intent(this, CardEmulationService::class.java)
@@ -402,6 +452,11 @@ class MainActivity : Activity(), ReaderCallback {
                             
                             // Vibrate on message received
                             vibrate(200)
+                            
+                            // Check if auto-open links is enabled
+                            if (dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, true)) {
+                                openLinksInMessage(receivedMessage)
+                            }
                         }
                     } else {
                         Log.d(TAG, "Empty or duplicate message received, ignoring: $receivedMessage")

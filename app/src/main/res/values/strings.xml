@@ -21,4 +21,11 @@
     <string name="message_hint">Type a message…</string>
     <string name="message_copied">Message copied to clipboard</string>
     <string name="show_more">show more</string>
+    
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="back_button">Back</string>
+    <string name="settings_category_links">Links</string>
+    <string name="setting_auto_open_links">Open links automatically</string>
+    <string name="setting_auto_open_links_desc">When enabled, links in messages will open automatically</string>
 </resources>

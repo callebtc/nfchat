@@ -19,7 +19,7 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         private const val TAG = "MessageDbHelper"
         
         // If you change the database schema, you must increment the database version
-        const val DATABASE_VERSION = 1
+        const val DATABASE_VERSION = 2
         const val DATABASE_NAME = "Messages.db"
 
         // SQL statement to create the messages table - not using const because it uses string interpolation
@@ -30,34 +30,53 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             "${MessageContract.MessageEntry.COLUMN_IS_SENT} INTEGER NOT NULL, " +
             "${MessageContract.MessageEntry.COLUMN_IS_DELIVERED} INTEGER NOT NULL, " +
             "${MessageContract.MessageEntry.COLUMN_TIMESTAMP} INTEGER NOT NULL)"
+            
+        // SQL statement to create the settings table
+        private val SQL_CREATE_SETTINGS_TABLE =
+            "CREATE TABLE ${SettingsContract.SettingsEntry.TABLE_NAME} (" +
+            "${BaseColumns._ID} INTEGER PRIMARY KEY, " +
+            "${SettingsContract.SettingsEntry.COLUMN_KEY} TEXT UNIQUE NOT NULL, " +
+            "${SettingsContract.SettingsEntry.COLUMN_VALUE} TEXT NOT NULL)"
 
         // SQL statement to delete the messages table
         private val SQL_DELETE_MESSAGES_TABLE = "DROP TABLE IF EXISTS ${MessageContract.MessageEntry.TABLE_NAME}"
+        
+        // SQL statement to delete the settings table
+        private val SQL_DELETE_SETTINGS_TABLE = "DROP TABLE IF EXISTS ${SettingsContract.SettingsEntry.TABLE_NAME}"
     }
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(SQL_CREATE_MESSAGES_TABLE)
+        db.execSQL(SQL_CREATE_SETTINGS_TABLE)
+        
+        // Insert default settings
+        insertDefaultSettings(db)
+        
         Log.d(TAG, "Database created with version $DATABASE_VERSION")
+    }
+    
+    private fun insertDefaultSettings(db: SQLiteDatabase) {
+        // Auto open links is enabled by default
+        val values = ContentValues().apply {
+            put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS)
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "true")
+        }
+        
+        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, values)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // This database is only a cache for messages, so its upgrade policy is
-        // to simply discard the data and start over
-        // In a real app, you would migrate the data!
         Log.d(TAG, "Upgrading database from version $oldVersion to $newVersion")
         
-        // Example of a migration path
+        // Migration path
         when (oldVersion) {
             1 -> {
-                // Upgrade from version 1 to 2
-                // Example: db.execSQL("ALTER TABLE ${MessageContract.MessageEntry.TABLE_NAME} ADD COLUMN new_column TEXT")
+                // Upgrade from version 1 to 2 - Add settings table
+                db.execSQL(SQL_CREATE_SETTINGS_TABLE)
+                insertDefaultSettings(db)
             }
             // Add more cases for future migrations
         }
-        
-        // If you want to start fresh (not recommended for production)
-        // db.execSQL(SQL_DELETE_MESSAGES_TABLE)
-        // onCreate(db)
     }
 
     override fun onDowngrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -155,5 +174,91 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
     fun clearAllMessages(): Int {
         val db = writableDatabase
         return db.delete(MessageContract.MessageEntry.TABLE_NAME, null, null)
+    }
+    
+    /**
+     * Get a setting value by key
+     * @param key The setting key
+     * @param defaultValue The default value to return if the setting is not found
+     * @return The setting value or defaultValue if not found
+     */
+    fun getSetting(key: String, defaultValue: String): String {
+        val db = readableDatabase
+        
+        val projection = arrayOf(SettingsContract.SettingsEntry.COLUMN_VALUE)
+        val selection = "${SettingsContract.SettingsEntry.COLUMN_KEY} = ?"
+        val selectionArgs = arrayOf(key)
+        
+        val cursor = db.query(
+            SettingsContract.SettingsEntry.TABLE_NAME,
+            projection,
+            selection,
+            selectionArgs,
+            null,
+            null,
+            null
+        )
+        
+        var value = defaultValue
+        
+        with(cursor) {
+            if (moveToFirst()) {
+                value = getString(getColumnIndexOrThrow(SettingsContract.SettingsEntry.COLUMN_VALUE))
+            }
+        }
+        cursor.close()
+        
+        return value
+    }
+    
+    /**
+     * Get a boolean setting value by key
+     * @param key The setting key
+     * @param defaultValue The default value to return if the setting is not found
+     * @return The setting value as a boolean or defaultValue if not found
+     */
+    fun getBooleanSetting(key: String, defaultValue: Boolean): Boolean {
+        val stringValue = getSetting(key, defaultValue.toString())
+        return stringValue.toBoolean()
+    }
+    
+    /**
+     * Set a setting value
+     * @param key The setting key
+     * @param value The setting value
+     * @return The number of rows affected
+     */
+    fun setSetting(key: String, value: String): Long {
+        val db = writableDatabase
+        
+        val values = ContentValues().apply {
+            put(SettingsContract.SettingsEntry.COLUMN_KEY, key)
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, value)
+        }
+        
+        // Try to update first
+        val rowsAffected = db.update(
+            SettingsContract.SettingsEntry.TABLE_NAME,
+            values,
+            "${SettingsContract.SettingsEntry.COLUMN_KEY} = ?",
+            arrayOf(key)
+        )
+        
+        // If no rows were updated, insert a new row
+        return if (rowsAffected > 0) {
+            rowsAffected.toLong()
+        } else {
+            db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, values)
+        }
+    }
+    
+    /**
+     * Set a boolean setting value
+     * @param key The setting key
+     * @param value The boolean setting value
+     * @return The number of rows affected
+     */
+    fun setBooleanSetting(key: String, value: Boolean): Long {
+        return setSetting(key, value.toString())
     }
 } 
