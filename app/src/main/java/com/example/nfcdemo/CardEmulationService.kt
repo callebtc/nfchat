@@ -67,6 +67,9 @@ class CardEmulationService : HostApduService() {
     // Callback to notify MainActivity about chunked transfer progress
     var onChunkProgressListener: ((Int, Int) -> Unit)? = null
     
+    // Callback to notify MainActivity about chunked transfer errors
+    var onChunkErrorListener: ((String) -> Unit)? = null
+    
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -157,6 +160,8 @@ class CardEmulationService : HostApduService() {
         } catch (e: Exception) {
             Log.e(TAG, "Error processing chunk init: ${e.message}")
             isReceivingChunkedMessage = false
+            // Notify MainActivity about the error
+            onChunkErrorListener?.invoke(e.message ?: "Unknown error during chunk initialization")
             return UNKNOWN_CMD_SW
         }
     }
@@ -164,6 +169,7 @@ class CardEmulationService : HostApduService() {
     private fun handleChunkData(commandString: String): ByteArray {
         if (!isReceivingChunkedMessage) {
             Log.e(TAG, "Received chunk data but not in chunked transfer mode")
+            onChunkErrorListener?.invoke("Received chunk data but not in chunked transfer mode")
             return UNKNOWN_CMD_SW
         }
         
@@ -173,6 +179,7 @@ class CardEmulationService : HostApduService() {
             val firstColonIndex = commandString.indexOf(':', CMD_CHUNK_DATA.length)
             if (firstColonIndex == -1) {
                 Log.e(TAG, "Invalid chunk data format: $commandString")
+                onChunkErrorListener?.invoke("Invalid chunk data format")
                 return UNKNOWN_CMD_SW
             }
             
@@ -194,6 +201,7 @@ class CardEmulationService : HostApduService() {
             return concatArrays(ackMessage, SELECT_OK_SW)
         } catch (e: Exception) {
             Log.e(TAG, "Error processing chunk data: ${e.message}")
+            onChunkErrorListener?.invoke("Error processing chunk data: ${e.message}")
             return UNKNOWN_CMD_SW
         }
     }
@@ -201,6 +209,7 @@ class CardEmulationService : HostApduService() {
     private fun handleChunkComplete(): ByteArray {
         if (!isReceivingChunkedMessage) {
             Log.e(TAG, "Received chunk complete but not in chunked transfer mode")
+            onChunkErrorListener?.invoke("Received chunk complete but not in chunked transfer mode")
             return UNKNOWN_CMD_SW
         }
         
@@ -209,6 +218,7 @@ class CardEmulationService : HostApduService() {
             if (receivedChunks != totalChunks) {
                 Log.e(TAG, "Chunked transfer incomplete: received $receivedChunks of $totalChunks chunks")
                 isReceivingChunkedMessage = false
+                onChunkErrorListener?.invoke("Chunked transfer incomplete: received $receivedChunks of $totalChunks chunks")
                 return UNKNOWN_CMD_SW
             }
             
@@ -226,6 +236,7 @@ class CardEmulationService : HostApduService() {
         } catch (e: Exception) {
             Log.e(TAG, "Error completing chunked transfer: ${e.message}")
             isReceivingChunkedMessage = false
+            onChunkErrorListener?.invoke("Error completing chunked transfer: ${e.message}")
             return UNKNOWN_CMD_SW
         }
     }
@@ -237,6 +248,9 @@ class CardEmulationService : HostApduService() {
         if (isReceivingChunkedMessage) {
             Log.d(TAG, "Chunked transfer interrupted")
             isReceivingChunkedMessage = false
+            
+            // Notify MainActivity about the interruption
+            onChunkErrorListener?.invoke("Connection lost during chunked transfer")
         }
     }
     

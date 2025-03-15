@@ -28,8 +28,13 @@
     <string name="wait_for_current_operation">Please wait until current send operation completes</string>
     <string name="sending_chunk">Sending chunk %1$d of %2$d</string>
     <string name="receiving_chunk">Receiving chunk %1$d of %2$d</string>
+    <string name="chunk_acknowledged">Chunk %1$d of %2$d acknowledged</string>
     <string name="chunked_transfer_complete">Chunked transfer complete</string>
     <string name="chunked_transfer_failed">Chunked transfer failed</string>
+    <string name="chunked_transfer_failed_message">Transfer failed. Switching to receive mode.</string>
+    <string name="chunked_transfer_incomplete">Not all chunks were acknowledged. Transfer incomplete.</string>
+    <string name="chunked_transfer_error">Error during transfer: %1$s</string>
+    <string name="chunked_transfer_error_receiver">Error receiving chunked message: %1$s</string>
     
     <!-- Settings -->
     <string name="settings_title">Settings</string>

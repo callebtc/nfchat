@@ -403,6 +403,20 @@ class MainActivity : Activity(), ReaderCallback {
                 }
             }
         }
+        
+        // Set up chunk error listener
+        CardEmulationService.instance?.onChunkErrorListener = { errorMessage ->
+            mainHandler.post {
+                Log.e(TAG, "Chunk error: $errorMessage")
+                tvStatus.text = getString(R.string.chunked_transfer_failed)
+                Toast.makeText(this, getString(R.string.chunked_transfer_error_receiver, errorMessage), Toast.LENGTH_LONG).show()
+                
+                // Make sure we're in receive mode to recover from the error
+                if (!isInReceiveMode) {
+                    switchToReceiveMode()
+                }
+            }
+        }
     }
     
     /**
@@ -553,11 +567,27 @@ class MainActivity : Activity(), ReaderCallback {
             Log.e(TAG, "Error communicating with tag: ${e.message}")
             runOnUiThread {
                 tvStatus.text = "Communication error: ${e.message}"
+                
+                // If we were in chunked send mode, show a more specific error message
+                if (isInChunkedSendMode) {
+                    Toast.makeText(this, getString(R.string.chunked_transfer_error, e.message), Toast.LENGTH_LONG).show()
+                    resetChunkedSendMode()
+                    // Switch to receive mode to recover from error
+                    switchToReceiveMode()
+                }
             }
         } catch (e: TagLostException) {
             Log.e(TAG, "Tag lost: ${e.message}")
             runOnUiThread {
                 tvStatus.text = "Tag connection lost. Try again."
+                
+                // If we were in chunked send mode, show a more specific error message
+                if (isInChunkedSendMode) {
+                    Toast.makeText(this, getString(R.string.chunked_transfer_error, "Connection lost"), Toast.LENGTH_LONG).show()
+                    resetChunkedSendMode()
+                    // Switch to receive mode to recover from error
+                    switchToReceiveMode()
+                }
             }
         } finally {
             try {
@@ -855,8 +885,11 @@ class MainActivity : Activity(), ReaderCallback {
                     Log.e(TAG, "Failed to initialize chunked transfer")
                     runOnUiThread {
                         tvStatus.text = getString(R.string.chunked_transfer_failed)
+                        Toast.makeText(this, getString(R.string.chunked_transfer_failed_message), Toast.LENGTH_LONG).show()
+                        resetChunkedSendMode()
+                        // Switch to receive mode to recover from error
+                        switchToReceiveMode()
                     }
-                    resetChunkedSendMode()
                     return
                 }
                 
@@ -882,7 +915,7 @@ class MainActivity : Activity(), ReaderCallback {
                 
                 // Update UI with current progress
                 runOnUiThread {
-                    tvStatus.text = getString(R.string.sending_chunk, acknowledgedChunks.size, totalChunks)
+                    tvStatus.text = getString(R.string.sending_chunk, acknowledgedChunks.size + 1, totalChunks)
                 }
                 
                 // Send the chunk
@@ -903,6 +936,11 @@ class MainActivity : Activity(), ReaderCallback {
                         val ackIndex = responseStr.substring("CHUNK_ACK:".length).toInt()
                         Log.d(TAG, "Chunk $ackIndex acknowledged")
                         acknowledgedChunks.add(ackIndex)
+                        
+                        // Update UI with current progress after acknowledgment
+                        runOnUiThread {
+                            tvStatus.text = getString(R.string.chunk_acknowledged, acknowledgedChunks.size, totalChunks)
+                        }
                     }
                 }
                 
@@ -961,18 +999,30 @@ class MainActivity : Activity(), ReaderCallback {
                     Log.e(TAG, "Failed to complete chunked transfer")
                     runOnUiThread {
                         tvStatus.text = getString(R.string.chunked_transfer_failed)
+                        Toast.makeText(this, getString(R.string.chunked_transfer_failed_message), Toast.LENGTH_LONG).show()
+                        resetChunkedSendMode()
+                        // Switch to receive mode to recover from error
+                        switchToReceiveMode()
                     }
                 }
             } else {
                 Log.e(TAG, "Not all chunks were acknowledged: ${acknowledgedChunks.size}/$totalChunks")
                 runOnUiThread {
                     tvStatus.text = getString(R.string.chunked_transfer_failed)
+                    Toast.makeText(this, getString(R.string.chunked_transfer_incomplete), Toast.LENGTH_LONG).show()
+                    resetChunkedSendMode()
+                    // Switch to receive mode to recover from error
+                    switchToReceiveMode()
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error during chunked sending: ${e.message}")
             runOnUiThread {
                 tvStatus.text = getString(R.string.chunked_transfer_failed)
+                Toast.makeText(this, getString(R.string.chunked_transfer_error, e.message), Toast.LENGTH_LONG).show()
+                resetChunkedSendMode()
+                // Switch to receive mode to recover from error
+                switchToReceiveMode()
             }
         }
     }
