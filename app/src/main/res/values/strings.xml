@@ -43,6 +43,8 @@
     <string name="settings_category_links">Links</string>
     <string name="setting_auto_open_links">Open links automatically</string>
     <string name="setting_auto_open_links_desc">When enabled, links in messages will open automatically</string>
+    <string name="setting_use_internal_browser">Use internal browser</string>
+    <string name="setting_use_internal_browser_desc">When enabled, links will open in the app instead of an external browser</string>
     <string name="settings_category_sharing">Sharing</string>
     <string name="setting_auto_send_shared">Auto-send shared content</string>
     <string name="setting_auto_send_shared_desc">When enabled, content shared to the app will be sent automatically</string>
@@ -57,4 +59,8 @@
     <string name="setting_chunk_delay_desc">Delay between sending chunks in milliseconds</string>
     <string name="setting_transfer_timeout">Transfer timeout (seconds)</string>
     <string name="setting_transfer_timeout_desc">Time to wait before aborting a stalled transfer</string>
+    <string name="web_view_back">Back</string>
+    <string name="web_view_forward">Forward</string>
+    <string name="web_view_close">Close</string>
+    <string name="web_view_loading">Loading...</string>
 </resources>

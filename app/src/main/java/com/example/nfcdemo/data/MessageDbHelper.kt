@@ -19,7 +19,7 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         private const val TAG = "MessageDbHelper"
         
         // If you change the database schema, you must increment the database version
-        const val DATABASE_VERSION = 3
+        const val DATABASE_VERSION = 4
         const val DATABASE_NAME = "Messages.db"
 
         // SQL statement to create the messages table - not using const because it uses string interpolation
@@ -62,6 +62,13 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             put(SettingsContract.SettingsEntry.COLUMN_VALUE, "true")
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, autoOpenLinksValues)
+        
+        // Use internal browser is disabled by default
+        val useInternalBrowserValues = ContentValues().apply {
+            put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER)
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "false")
+        }
+        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, useInternalBrowserValues)
         
         // Auto send shared content is enabled by default
         val autoSendSharedValues = ContentValues().apply {
@@ -124,8 +131,23 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                     put(SettingsContract.SettingsEntry.COLUMN_VALUE, "false")
                 }
                 db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, closeAfterSharedSendValues)
+                
+                // Use internal browser is disabled by default
+                val useInternalBrowserValues = ContentValues().apply {
+                    put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER)
+                    put(SettingsContract.SettingsEntry.COLUMN_VALUE, "false")
+                }
+                db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, useInternalBrowserValues)
             }
             // Add more cases for future migrations
+            3 -> {
+                // Upgrade from version 3 to 4 - Add internal browser setting
+                val useInternalBrowserValues = ContentValues().apply {
+                    put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER)
+                    put(SettingsContract.SettingsEntry.COLUMN_VALUE, "false")
+                }
+                db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, useInternalBrowserValues)
+            }
         }
     }
 

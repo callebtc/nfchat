@@ -14,6 +14,7 @@ object SettingsContract {
         
         // Settings keys
         const val KEY_AUTO_OPEN_LINKS = "auto_open_links"
+        const val KEY_USE_INTERNAL_BROWSER = "use_internal_browser"
         const val KEY_AUTO_SEND_SHARED = "auto_send_shared"
         const val KEY_CLOSE_AFTER_SHARED_SEND = "close_after_shared_send"
         

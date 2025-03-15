@@ -16,6 +16,7 @@ class SettingsActivity : Activity() {
     private val TAG = "SettingsActivity"
     private lateinit var dbHelper: MessageDbHelper
     private lateinit var cbAutoOpenLinks: CheckBox
+    private lateinit var cbUseInternalBrowser: CheckBox
     private lateinit var cbAutoSendShared: CheckBox
     private lateinit var cbCloseAfterSharedSend: CheckBox
     private lateinit var etMaxChunkSize: EditText
@@ -37,6 +38,7 @@ class SettingsActivity : Activity() {
         
         // Initialize views
         cbAutoOpenLinks = findViewById(R.id.cbAutoOpenLinks)
+        cbUseInternalBrowser = findViewById(R.id.cbUseInternalBrowser)
         cbAutoSendShared = findViewById(R.id.cbAutoSendShared)
         cbCloseAfterSharedSend = findViewById(R.id.cbCloseAfterSharedSend)
         etMaxChunkSize = findViewById(R.id.etMaxChunkSize)
@@ -58,6 +60,13 @@ class SettingsActivity : Activity() {
             true
         )
         cbAutoOpenLinks.isChecked = autoOpenLinks
+        
+        // Load use internal browser setting
+        val useInternalBrowser = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
+            false
+        )
+        cbUseInternalBrowser.isChecked = useInternalBrowser
         
         // Load auto send shared setting
         val autoSendShared = dbHelper.getBooleanSetting(
@@ -107,6 +116,14 @@ class SettingsActivity : Activity() {
         cbAutoOpenLinks.setOnCheckedChangeListener { _, isChecked ->
             dbHelper.setBooleanSetting(
                 SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS,
+                isChecked
+            )
+        }
+        
+        // Use internal browser checkbox
+        cbUseInternalBrowser.setOnCheckedChangeListener { _, isChecked ->
+            dbHelper.setBooleanSetting(
+                SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER,
                 isChecked
             )
         }

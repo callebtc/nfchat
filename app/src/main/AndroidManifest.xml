@@ -4,6 +4,7 @@
 
     <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-feature android:name="android.hardware.nfc" android:required="true"/>
     <uses-feature android:name="android.hardware.nfc.hce" android:required="true" />
 
@@ -32,6 +33,12 @@
         <!-- Settings Activity -->
         <activity
             android:name=".SettingsActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme" />
+        
+        <!-- WebView Activity -->
+        <activity
+            android:name=".WebViewActivity"
             android:exported="false"
             android:theme="@style/AppTheme" />
         

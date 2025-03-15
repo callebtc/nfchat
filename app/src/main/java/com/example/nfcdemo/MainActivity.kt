@@ -517,6 +517,11 @@ class MainActivity : Activity(), ReaderCallback {
      * Automatically open links in a message if auto-open links is enabled
      */
     private fun openLinksInMessage(message: String) {
+        // Check if auto-open links is enabled
+        if (!dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, true)) {
+            return
+        }
+        
         // Find URLs in the message
         val matcher = Patterns.WEB_URL.matcher(message)
         if (matcher.find()) {
@@ -529,9 +534,22 @@ class MainActivity : Activity(), ReaderCallback {
                     url
                 }
                 
-                // Open the URL
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
-                startActivity(intent)
+                // Check if we should use the internal browser
+                val useInternalBrowser = dbHelper.getBooleanSetting(
+                    SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
+                    false
+                )
+                
+                if (useInternalBrowser) {
+                    // Open the URL in an internal WebView
+                    val intent = Intent(this, WebViewActivity::class.java)
+                    intent.putExtra(WebViewActivity.EXTRA_URL, fullUrl)
+                    startActivity(intent)
+                } else {
+                    // Open the URL in an external browser
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
+                    startActivity(intent)
+                }
             }
         }
     }
@@ -644,7 +662,7 @@ class MainActivity : Activity(), ReaderCallback {
                                 runOnUiThread {
                                     // Add the message to the chat and save to database
                                     saveAndAddMessage(messageData.content, false)
-                                    tvStatus.text = getString(R.string.message_received)
+                                    tvStatus.text = getString(R.string.status_receive_mode)
                                     
                                     // Vibrate on message received
                                     vibrate(200)
@@ -667,7 +685,7 @@ class MainActivity : Activity(), ReaderCallback {
                             runOnUiThread {
                                 // Add the message to the chat and save to database
                                 saveAndAddMessage(receivedMessage, false)
-                                tvStatus.text = getString(R.string.message_received)
+                                tvStatus.text = getString(R.string.status_receive_mode)
                                 
                                 // Vibrate on message received
                                 vibrate(200)
