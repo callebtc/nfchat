@@ -3,6 +3,12 @@ package com.example.nfcdemo
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Color
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.TextPaint
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -20,6 +26,9 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
     companion object {
         private const val VIEW_TYPE_SENT = 1
         private const val VIEW_TYPE_RECEIVED = 2
+        
+        // Configurable message length limit before truncation
+        private var MESSAGE_LENGTH_LIMIT = 200
     }
 
     data class Message(
@@ -27,7 +36,8 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         val isSent: Boolean,
         var isDelivered: Boolean = false,
         val timestamp: Date = Date(),
-        var id: Long = -1 // Database ID
+        var id: Long = -1, // Database ID
+        var isExpanded: Boolean = false // Track expanded state
     )
 
     private val messages = mutableListOf<Message>()
@@ -36,6 +46,17 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
     init {
         // Load message history from database when adapter is created
         loadMessageHistory()
+    }
+    
+    // Method to set the message length limit
+    fun setMessageLengthLimit(limit: Int) {
+        MESSAGE_LENGTH_LIMIT = limit
+        notifyDataSetChanged() // Refresh all messages with new limit
+    }
+    
+    // Method to get the current message length limit
+    fun getMessageLengthLimit(): Int {
+        return MESSAGE_LENGTH_LIMIT
     }
 
     private fun loadMessageHistory() {
@@ -65,7 +86,7 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
             sentHolder.timestamp.text = timeString
         } else {
             val receivedHolder = holder as ReceivedMessageViewHolder
-            receivedHolder.bind(message.content)
+            receivedHolder.bind(message)
             receivedHolder.timestamp.text = timeString
         }
     }
@@ -119,6 +140,47 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
             notifyItemChanged(position)
         }
     }
+    
+    // Helper method to create truncated text with "show more" option
+    private fun createTruncatedText(message: Message, position: Int): SpannableString {
+        val fullText = message.content
+        
+        // If message is already expanded or shorter than limit, return the full text
+        if (message.isExpanded || fullText.length <= MESSAGE_LENGTH_LIMIT) {
+            return SpannableString(fullText)
+        }
+        
+        // Create truncated text with "show more" suffix
+        val truncatedText = fullText.substring(0, MESSAGE_LENGTH_LIMIT) + "... "
+        val showMoreText = context.getString(R.string.show_more)
+        val spannableString = SpannableString(truncatedText + showMoreText)
+        
+        // Make "show more" clickable
+        val clickableSpan = object : ClickableSpan() {
+            override fun onClick(widget: View) {
+                // Expand the message
+                message.isExpanded = true
+                notifyItemChanged(position)
+            }
+            
+            override fun updateDrawState(ds: TextPaint) {
+                super.updateDrawState(ds)
+                // Style for "show more" text - grey and no underline
+                ds.color = context.getColor(R.color.text_timestamp)
+                ds.isUnderlineText = false
+            }
+        }
+        
+        // Apply the clickable span to the "show more" part
+        spannableString.setSpan(
+            clickableSpan,
+            truncatedText.length,
+            truncatedText.length + showMoreText.length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
+        
+        return spannableString
+    }
 
     inner class SentMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val messageText: TextView = itemView.findViewById(R.id.tvMessageContent)
@@ -130,7 +192,13 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
             messageText.autoLinkMask = android.text.util.Linkify.WEB_URLS or 
                                        android.text.util.Linkify.EMAIL_ADDRESSES or
                                        android.text.util.Linkify.PHONE_NUMBERS
-            messageText.text = message.content
+            
+            // Apply truncation if needed
+            val spannableText = createTruncatedText(message, adapterPosition)
+            messageText.text = spannableText
+            
+            // Enable clickable spans
+            messageText.movementMethod = LinkMovementMethod.getInstance()
             
             // Show checkmark if message is delivered
             sentCheck.visibility = if (message.isDelivered) View.VISIBLE else View.GONE
@@ -147,16 +215,22 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         val messageText: TextView = itemView.findViewById(R.id.tvMessageContent)
         val timestamp: TextView = itemView.findViewById(R.id.tvTimestamp)
         
-        fun bind(message: String) {
+        fun bind(message: Message) {
             // Make links clickable
             messageText.autoLinkMask = android.text.util.Linkify.WEB_URLS or 
                                        android.text.util.Linkify.EMAIL_ADDRESSES or
                                        android.text.util.Linkify.PHONE_NUMBERS
-            messageText.text = message
+            
+            // Apply truncation if needed
+            val spannableText = createTruncatedText(message, adapterPosition)
+            messageText.text = spannableText
+            
+            // Enable clickable spans
+            messageText.movementMethod = LinkMovementMethod.getInstance()
             
             // Set long click listener for copying
             itemView.setOnLongClickListener {
-                copyToClipboard(message)
+                copyToClipboard(message.content)
                 true
             }
         }

@@ -48,6 +48,9 @@ class MainActivity : Activity(), ReaderCallback {
     private var lastSentMessage = ""
     private var lastReceivedMessage = ""
     
+    // Default message length limit before truncation
+    private var messageLengthLimit = 200
+    
     // For foreground dispatch
     private lateinit var pendingIntent: PendingIntent
     private lateinit var intentFilters: Array<IntentFilter>
@@ -68,6 +71,9 @@ class MainActivity : Activity(), ReaderCallback {
             stackFromEnd = true // Messages appear from bottom
         }
         rvMessages.adapter = messageAdapter
+        
+        // Set the message length limit
+        setMessageLengthLimit(messageLengthLimit)
 
         // Initialize NFC
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
@@ -143,6 +149,23 @@ class MainActivity : Activity(), ReaderCallback {
 
         // Handle incoming share intents
         handleIncomingShareIntent(intent)
+    }
+    
+    /**
+     * Set the message length limit before truncation
+     * @param limit The maximum number of characters to display before truncating
+     */
+    fun setMessageLengthLimit(limit: Int) {
+        messageLengthLimit = limit
+        messageAdapter.setMessageLengthLimit(limit)
+    }
+    
+    /**
+     * Get the current message length limit
+     * @return The current message length limit
+     */
+    fun getMessageLengthLimit(): Int {
+        return messageLengthLimit
     }
     
     private fun setupForegroundDispatch() {
