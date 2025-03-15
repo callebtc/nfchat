@@ -144,9 +144,8 @@ class MainActivity : Activity(), ReaderCallback {
             // Store the message to send
             lastSentMessage = etMessage.text.toString()
             
-            // Add the message to the chat as a sent message
-            messageAdapter.addSentMessage(lastSentMessage)
-            scrollToBottom()
+            // Add the message to the chat as a sent message and save to database
+            saveAndAddMessage(lastSentMessage, true)
             
             // Clear the input field after sending
             etMessage.text.clear()
@@ -317,12 +316,22 @@ class MainActivity : Activity(), ReaderCallback {
         super.onNewIntent(intent)
         Log.d(TAG, "New intent received: ${intent.action}")
         
+        // Save the new intent to replace the old one
+        setIntent(intent)
+        
         // Handle share intents
         if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
             Log.d(TAG, "Share intent received while app is running")
             
             // Cancel any pending receive mode initialization
             mainHandler.removeCallbacksAndMessages(null)
+            
+            // If we're in send mode, finish the current operation first
+            if (isInSendMode) {
+                // If we're already in send mode, we need to wait until the current operation is complete
+                Toast.makeText(this, getString(R.string.wait_for_current_operation), Toast.LENGTH_SHORT).show()
+                return
+            }
             
             // Handle the share intent
             handleIncomingShareIntent(intent)
@@ -354,10 +363,9 @@ class MainActivity : Activity(), ReaderCallback {
                 lastReceivedMessage = receivedData
                 
                 mainHandler.post {
-                    // Update UI on the main thread
-                    messageAdapter.addReceivedMessage(receivedData)
+                    // Update UI on the main thread and save to database
+                    saveAndAddMessage(receivedData, false)
                     tvStatus.text = getString(R.string.message_received)
-                    scrollToBottom()
                     
                     // Vibrate on message received
                     vibrate(200)
@@ -527,9 +535,9 @@ class MainActivity : Activity(), ReaderCallback {
                         lastReceivedMessage = receivedMessage
                         
                         runOnUiThread {
-                            messageAdapter.addReceivedMessage(receivedMessage)
+                            // Add the message to the chat and save to database
+                            saveAndAddMessage(receivedMessage, false)
                             tvStatus.text = getString(R.string.message_received)
-                            scrollToBottom()
                             
                             // Vibrate on message received
                             vibrate(200)
@@ -635,6 +643,17 @@ class MainActivity : Activity(), ReaderCallback {
             // Mark that we were opened via share intent
             openedViaShareIntent = true
             
+            // If we're in receive mode, stop it first
+            if (isInReceiveMode) {
+                // Stop the CardEmulationService
+                val serviceIntent = Intent(this, CardEmulationService::class.java)
+                stopService(serviceIntent)
+                
+                // Update state
+                isInReceiveMode = false
+                updateModeIndicators()
+            }
+            
             // Extract the shared text
             val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
             if (!sharedText.isNullOrEmpty()) {
@@ -662,9 +681,8 @@ class MainActivity : Activity(), ReaderCallback {
                             // Store the message to send
                             lastSentMessage = etMessage.text.toString()
                             
-                            // Add the message to the chat as a sent message
-                            messageAdapter.addSentMessage(lastSentMessage)
-                            scrollToBottom()
+                            // Add the message to the chat as a sent message and save to database
+                            saveAndAddMessage(lastSentMessage, true)
                             
                             // Clear the input field after sending
                             etMessage.text.clear()
@@ -678,6 +696,10 @@ class MainActivity : Activity(), ReaderCallback {
                 } else {
                     // Just show a toast that the text is ready to send
                     Toast.makeText(this, getString(R.string.text_received_manual_send), Toast.LENGTH_LONG).show()
+                    
+                    // We don't save the message yet - it will be saved when the user presses send
+                    // This avoids duplicate messages in the database
+                    // The message is already in the input field, so the user can edit it before sending
                 }
             } else {
                 Log.d(TAG, "Shared text is null or empty")
@@ -698,5 +720,29 @@ class MainActivity : Activity(), ReaderCallback {
                 switchToReceiveMode()
             }
         }, 500)
+    }
+
+    /**
+     * Helper method to ensure consistent message saving
+     * This method ensures that all messages are properly stored in the database
+     * @param messageText The message text to save
+     * @param isSent Whether the message is sent by the user
+     * @return The position of the added message in the adapter
+     */
+    private fun saveAndAddMessage(messageText: String, isSent: Boolean): Int {
+        if (messageText.isBlank()) return -1
+        
+        // Add the message to the adapter (which saves to the database)
+        val position = if (isSent) {
+            messageAdapter.addSentMessage(messageText)
+        } else {
+            messageAdapter.addReceivedMessage(messageText)
+            messageAdapter.itemCount - 1
+        }
+        
+        // Scroll to show the new message
+        scrollToBottom()
+        
+        return position
     }
 }

@@ -25,6 +25,7 @@
     <string name="message_sent_closing">Message sent successfully. Closing app.</string>
     <string name="text_received_auto_send">Text received. Preparing to send via NFC.</string>
     <string name="text_received_manual_send">Text received. Press send when ready.</string>
+    <string name="wait_for_current_operation">Please wait until current send operation completes</string>
     
     <!-- Settings -->
     <string name="settings_title">Settings</string>
