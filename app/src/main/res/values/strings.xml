@@ -21,6 +21,10 @@
     <string name="message_hint">Type a message…</string>
     <string name="message_copied">Message copied to clipboard</string>
     <string name="show_more">show more</string>
+    <string name="no_pending_message">No pending message to send</string>
+    <string name="message_sent_closing">Message sent successfully. Closing app.</string>
+    <string name="text_received_auto_send">Text received. Preparing to send via NFC.</string>
+    <string name="text_received_manual_send">Text received. Press send when ready.</string>
     
     <!-- Settings -->
     <string name="settings_title">Settings</string>

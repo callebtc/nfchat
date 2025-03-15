@@ -141,23 +141,18 @@ class MainActivity : Activity(), ReaderCallback {
                 return@setOnClickListener
             }
             
-            isInSendMode = true
-            isInReceiveMode = false
-            updateModeIndicators()
-            tvStatus.text = getString(R.string.status_send_mode)
-            
             // Store the message to send
             lastSentMessage = etMessage.text.toString()
             
             // Add the message to the chat as a sent message
-            messageAdapter.addSentMessage(etMessage.text.toString())
+            messageAdapter.addSentMessage(lastSentMessage)
             scrollToBottom()
             
             // Clear the input field after sending
             etMessage.text.clear()
             
-            // Enable reader mode for sending data
-            enableReaderMode()
+            // Switch to send mode
+            switchToSendMode()
         }
         
         // Settings button
@@ -165,6 +160,86 @@ class MainActivity : Activity(), ReaderCallback {
             val intent = Intent(this, SettingsActivity::class.java)
             startActivity(intent)
         }
+        
+        // Status text view - toggle between send and receive modes
+        tvStatus.setOnClickListener {
+            toggleMode()
+        }
+    }
+    
+    /**
+     * Toggle between send and receive modes when the status text is tapped
+     */
+    private fun toggleMode() {
+        if (isInSendMode) {
+            // If in send mode, switch to receive mode
+            switchToReceiveMode()
+        } else if (isInReceiveMode) {
+            // If in receive mode, try to switch to send mode if there's a pending message
+            if (lastSentMessage.isNotEmpty()) {
+                switchToSendMode()
+            } else {
+                // No pending message to send
+                Toast.makeText(this, getString(R.string.no_pending_message), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    /**
+     * Switch to send mode and attempt to send the pending message
+     */
+    private fun switchToSendMode() {
+        // Only proceed if there's a message to send
+        if (lastSentMessage.isEmpty()) {
+            Log.d(TAG, "No message to send, not switching to send mode")
+            return
+        }
+        
+        // First, stop any receive mode operations
+        if (isInReceiveMode) {
+            // Stop the CardEmulationService
+            val intent = Intent(this, CardEmulationService::class.java)
+            stopService(intent)
+        }
+        
+        // Update state
+        isInSendMode = true
+        isInReceiveMode = false
+        updateModeIndicators()
+        tvStatus.text = getString(R.string.status_send_mode)
+        
+        // Enable reader mode for sending data
+        enableReaderMode()
+        
+        Log.d(TAG, "Switched to send mode, ready to send: $lastSentMessage")
+    }
+    
+    /**
+     * Switch to receive mode
+     */
+    private fun switchToReceiveMode() {
+        // First, disable reader mode if we were in send mode
+        if (isInSendMode) {
+            disableReaderMode()
+        }
+        
+        // Update state
+        isInReceiveMode = true
+        isInSendMode = false
+        updateModeIndicators()
+        tvStatus.text = getString(R.string.status_receive_mode)
+        
+        // Start the CardEmulationService
+        val intent = Intent(this, CardEmulationService::class.java)
+        startService(intent)
+        
+        // Set up the message and listener
+        mainHandler.postDelayed({
+            CardEmulationService.instance?.messageToShare = etMessage.text.toString()
+            setupDataReceiver()
+        }, 100)
+        
+        Log.d(TAG, "Switched to receive mode")
     }
     
     /**
@@ -415,7 +490,7 @@ class MainActivity : Activity(), ReaderCallback {
                             
                             if (closeAfterSharedSend) {
                                 // Show a toast to inform the user
-                                Toast.makeText(this, "Message sent successfully. Closing app.", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(this, getString(R.string.message_sent_closing), Toast.LENGTH_SHORT).show()
                                 
                                 // Close the app after a short delay
                                 mainHandler.postDelayed({
@@ -429,21 +504,7 @@ class MainActivity : Activity(), ReaderCallback {
                         lastSentMessage = ""
                         
                         // Switch to receive mode automatically
-                        isInSendMode = false
-                        isInReceiveMode = true
-                        updateModeIndicators()
-                        tvStatus.text = getString(R.string.status_receive_mode)
-                        
-                        // Start the CardEmulationService for receiving response
-                        disableReaderMode()
-                        val intent = Intent(this, CardEmulationService::class.java)
-                        startService(intent)
-                        
-                        // Set up the message and listener with a delay
-                        mainHandler.postDelayed({
-                            CardEmulationService.instance?.messageToShare = etMessage.text.toString()
-                            setupDataReceiver()
-                        }, 100)
+                        switchToReceiveMode()
                         scrollToBottom()
                     }
                 } else {
@@ -590,7 +651,7 @@ class MainActivity : Activity(), ReaderCallback {
                 
                 if (autoSendShared) {
                     // Show a toast to inform the user
-                    Toast.makeText(this, "Text received. Preparing to send via NFC.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, getString(R.string.text_received_auto_send), Toast.LENGTH_LONG).show()
                     
                     // Automatically prepare to send the shared text
                     mainHandler.postDelayed({
@@ -609,20 +670,14 @@ class MainActivity : Activity(), ReaderCallback {
                             etMessage.text.clear()
                             
                             // Switch to send mode
-                            isInSendMode = true
-                            isInReceiveMode = false
-                            updateModeIndicators()
-                            tvStatus.text = getString(R.string.status_send_mode)
-                            
-                            // Enable reader mode for sending data
-                            enableReaderMode()
+                            switchToSendMode()
                         } else {
                             Log.d(TAG, "Text field is empty, not auto-sending")
                         }
                     }, 500) // Short delay to ensure UI is ready
                 } else {
                     // Just show a toast that the text is ready to send
-                    Toast.makeText(this, "Text received. Press send when ready.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, getString(R.string.text_received_manual_send), Toast.LENGTH_LONG).show()
                 }
             } else {
                 Log.d(TAG, "Shared text is null or empty")
@@ -636,23 +691,11 @@ class MainActivity : Activity(), ReaderCallback {
         // Reset the share intent flag since we're starting normally
         openedViaShareIntent = false
         
+        // Use the new switchToReceiveMode method for consistency
         mainHandler.postDelayed({
             // Only switch to receive mode if we're not already in send mode
             if (!isInSendMode) {
-                isInReceiveMode = true
-                isInSendMode = false
-                updateModeIndicators()
-                tvStatus.text = getString(R.string.status_receive_mode)
-                
-                // Start the CardEmulationService
-                val intent = Intent(this, CardEmulationService::class.java)
-                startService(intent)
-                
-                // Set up the message and listener
-                mainHandler.postDelayed({
-                    CardEmulationService.instance?.messageToShare = etMessage.text.toString()
-                    setupDataReceiver()
-                }, 100)
+                switchToReceiveMode()
             }
         }, 500)
     }
