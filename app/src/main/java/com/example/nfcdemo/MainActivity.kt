@@ -201,14 +201,16 @@ class MainActivity : Activity(), ReaderCallback {
         Log.d(TAG, "New intent received: ${intent.action}")
         
         // Handle the NFC intent if we're not in reader mode
-        if (!isInSendMode && intent.action == NfcAdapter.ACTION_TECH_DISCOVERED ||
+        if (!isInSendMode && (intent.action == NfcAdapter.ACTION_TECH_DISCOVERED ||
             intent.action == NfcAdapter.ACTION_TAG_DISCOVERED ||
-            intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) {
+            intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED)) {
             
             val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
             tag?.let {
                 // Process the tag if we're not already in reader mode
                 if (!isInSendMode) {
+                    // We'll still call onTagDiscovered, but we've fixed that method
+                    // to not vibrate for empty messages
                     onTagDiscovered(it)
                 }
             }
@@ -235,6 +237,7 @@ class MainActivity : Activity(), ReaderCallback {
                 }
             } else {
                 Log.d(TAG, "Empty or duplicate message received, ignoring: $receivedData")
+                // No UI updates or vibration for empty/duplicate messages
             }
         }
     }
@@ -370,6 +373,7 @@ class MainActivity : Activity(), ReaderCallback {
                         }
                     } else {
                         Log.d(TAG, "Empty or duplicate message received, ignoring: $receivedMessage")
+                        // Don't update UI or vibrate for empty/duplicate messages
                     }
                 }
             }
