@@ -9,8 +9,8 @@
     <string name="label_received_messages">Received Messages</string>
     <string name="status_idle">Ready</string>
     <string name="status_ready">Ready to send or receive</string>
-    <string name="status_send_mode">Send mode active</string>
-    <string name="status_receive_mode">Receive mode active</string>
+    <string name="status_send_mode">Sending message</string>
+    <string name="status_receive_mode">Ready to receive</string>
     <string name="message_sent">Message sent successfully</string>
     <string name="message_received">Message received</string>
     <string name="message_send_failed">Failed to send message</string>
@@ -35,6 +35,7 @@
     <string name="chunked_transfer_incomplete">Not all chunks were acknowledged. Transfer incomplete.</string>
     <string name="chunked_transfer_error">Error during transfer: %1$s</string>
     <string name="chunked_transfer_error_receiver">Error receiving chunked message: %1$s</string>
+    <string name="chunked_transfer_timeout">Transfer timed out. Switching to receive mode.</string>
     
     <!-- Settings -->
     <string name="settings_title">Settings</string>
@@ -54,4 +55,6 @@
     <string name="setting_max_chunk_size_desc">Maximum number of characters per chunk for long messages</string>
     <string name="setting_chunk_delay">Chunk delay (ms)</string>
     <string name="setting_chunk_delay_desc">Delay between sending chunks in milliseconds</string>
+    <string name="setting_transfer_timeout">Transfer timeout (seconds)</string>
+    <string name="setting_transfer_timeout_desc">Time to wait before aborting a stalled transfer</string>
 </resources>

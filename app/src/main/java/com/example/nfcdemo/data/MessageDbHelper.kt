@@ -90,6 +90,13 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             put(SettingsContract.SettingsEntry.COLUMN_VALUE, "200")
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, chunkDelayValues)
+        
+        // Default transfer timeout is 2 seconds
+        val transferTimeoutValues = ContentValues().apply {
+            put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_TRANSFER_TIMEOUT)
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "2")
+        }
+        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, transferTimeoutValues)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {

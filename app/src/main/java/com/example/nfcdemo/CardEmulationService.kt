@@ -70,6 +70,27 @@ class CardEmulationService : HostApduService() {
     // Callback to notify MainActivity about chunked transfer errors
     var onChunkErrorListener: ((String) -> Unit)? = null
     
+    /**
+     * Check if currently receiving a chunked message
+     */
+    fun isReceivingChunkedMessage(): Boolean {
+        return isReceivingChunkedMessage
+    }
+    
+    /**
+     * Reset the chunked message state
+     */
+    fun resetChunkedMessageState() {
+        if (isReceivingChunkedMessage) {
+            Log.d(TAG, "Resetting chunked message state")
+            isReceivingChunkedMessage = false
+            receivedChunks = 0
+            totalChunks = 0
+            chunkedMessageBuilder = StringBuilder()
+            chunkSize = 0
+        }
+    }
+    
     override fun onCreate() {
         super.onCreate()
         instance = this

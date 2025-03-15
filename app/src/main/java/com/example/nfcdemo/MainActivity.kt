@@ -72,9 +72,14 @@ class MainActivity : Activity(), ReaderCallback {
     private var totalChunks = 0
     private var maxChunkSize = 500
     private var chunkDelay = 200L
+    private var transferTimeout = 2 // in seconds
     private var acknowledgedChunks = mutableSetOf<Int>()
     private var chunkSendAttempts = mutableMapOf<Int, Int>()
     private val MAX_SEND_ATTEMPTS = 3
+    
+    // Transfer timeout handler
+    private var transferTimeoutHandler: Handler? = null
+    private var transferTimeoutRunnable: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -379,7 +384,9 @@ class MainActivity : Activity(), ReaderCallback {
                 mainHandler.post {
                     // Update UI on the main thread and save to database
                     saveAndAddMessage(receivedData, false)
-                    tvStatus.text = getString(R.string.message_received)
+                    
+                    // Show "Ready to receive" status instead of "Message received"
+                    tvStatus.text = getString(R.string.status_receive_mode)
                     
                     // Vibrate on message received
                     vibrate(200)
@@ -397,6 +404,12 @@ class MainActivity : Activity(), ReaderCallback {
         
         // Set up chunk progress listener
         CardEmulationService.instance?.onChunkProgressListener = { receivedChunks, totalChunks ->
+            // Cancel any existing timeout
+            cancelTransferTimeout()
+            
+            // Start a new timeout
+            startTransferTimeout()
+            
             mainHandler.post {
                 if (receivedChunks > 0) {
                     tvStatus.text = getString(R.string.receiving_chunk, receivedChunks, totalChunks)
@@ -406,6 +419,9 @@ class MainActivity : Activity(), ReaderCallback {
         
         // Set up chunk error listener
         CardEmulationService.instance?.onChunkErrorListener = { errorMessage ->
+            // Cancel any existing timeout
+            cancelTransferTimeout()
+            
             mainHandler.post {
                 Log.e(TAG, "Chunk error: $errorMessage")
                 tvStatus.text = getString(R.string.chunked_transfer_failed)
@@ -416,6 +432,54 @@ class MainActivity : Activity(), ReaderCallback {
                     switchToReceiveMode()
                 }
             }
+        }
+    }
+    
+    /**
+     * Start a timeout for chunked transfers
+     */
+    private fun startTransferTimeout() {
+        // Cancel any existing timeout first
+        cancelTransferTimeout()
+        
+        // Create a new timeout handler if needed
+        if (transferTimeoutHandler == null) {
+            transferTimeoutHandler = Handler(Looper.getMainLooper())
+        }
+        
+        // Create a new timeout runnable
+        transferTimeoutRunnable = Runnable {
+            Log.e(TAG, "Transfer timeout occurred")
+            
+            if (isInChunkedSendMode) {
+                // Handle timeout on sender side
+                runOnUiThread {
+                    tvStatus.text = getString(R.string.chunked_transfer_failed)
+                    Toast.makeText(this, getString(R.string.chunked_transfer_timeout), Toast.LENGTH_LONG).show()
+                    resetChunkedSendMode()
+                    switchToReceiveMode()
+                }
+            } else if (CardEmulationService.instance?.isReceivingChunkedMessage() == true) {
+                // Handle timeout on receiver side
+                CardEmulationService.instance?.resetChunkedMessageState()
+                runOnUiThread {
+                    tvStatus.text = getString(R.string.chunked_transfer_failed)
+                    Toast.makeText(this, getString(R.string.chunked_transfer_timeout), Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        
+        // Schedule the timeout
+        transferTimeoutHandler?.postDelayed(transferTimeoutRunnable!!, transferTimeout * 1000L)
+    }
+    
+    /**
+     * Cancel any active transfer timeout
+     */
+    private fun cancelTransferTimeout() {
+        transferTimeoutRunnable?.let {
+            transferTimeoutHandler?.removeCallbacks(it)
+            transferTimeoutRunnable = null
         }
     }
     
@@ -785,7 +849,12 @@ class MainActivity : Activity(), ReaderCallback {
             "200"
         ).toLong()
         
-        Log.d(TAG, "Loaded chunked message settings: maxChunkSize=$maxChunkSize, chunkDelay=$chunkDelay")
+        transferTimeout = dbHelper.getSetting(
+            SettingsContract.SettingsEntry.KEY_TRANSFER_TIMEOUT,
+            "2"
+        ).toInt()
+        
+        Log.d(TAG, "Loaded chunked message settings: maxChunkSize=$maxChunkSize, chunkDelay=$chunkDelay, transferTimeout=$transferTimeout")
     }
 
     /**
@@ -897,6 +966,9 @@ class MainActivity : Activity(), ReaderCallback {
                 runOnUiThread {
                     tvStatus.text = getString(R.string.sending_chunk, 0, totalChunks)
                 }
+                
+                // Start the transfer timeout
+                startTransferTimeout()
             }
             
             // Send chunks until all are acknowledged or max attempts reached
@@ -937,16 +1009,17 @@ class MainActivity : Activity(), ReaderCallback {
                         Log.d(TAG, "Chunk $ackIndex acknowledged")
                         acknowledgedChunks.add(ackIndex)
                         
-                        // Update UI with current progress after acknowledgment
-                        runOnUiThread {
-                            tvStatus.text = getString(R.string.chunk_acknowledged, acknowledgedChunks.size, totalChunks)
-                        }
+                        // Reset the transfer timeout since we got a response
+                        startTransferTimeout()
                     }
                 }
                 
                 // Small delay between chunks to avoid overwhelming the receiver
                 Thread.sleep(chunkDelay)
             }
+            
+            // Cancel the transfer timeout since we're done
+            cancelTransferTimeout()
             
             // If all chunks were acknowledged, send the completion command
             if (acknowledgedChunks.size == totalChunks) {
@@ -1016,6 +1089,9 @@ class MainActivity : Activity(), ReaderCallback {
                 }
             }
         } catch (e: Exception) {
+            // Cancel the transfer timeout
+            cancelTransferTimeout()
+            
             Log.e(TAG, "Error during chunked sending: ${e.message}")
             runOnUiThread {
                 tvStatus.text = getString(R.string.chunked_transfer_failed)
@@ -1057,6 +1133,9 @@ class MainActivity : Activity(), ReaderCallback {
      * Reset the chunked send mode state
      */
     private fun resetChunkedSendMode() {
+        // Cancel any active transfer timeout
+        cancelTransferTimeout()
+        
         isInChunkedSendMode = false
         chunksToSend.clear()
         acknowledgedChunks.clear()
