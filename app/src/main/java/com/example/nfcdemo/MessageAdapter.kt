@@ -91,6 +91,10 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         val timestamp: TextView = itemView.findViewById(R.id.tvTimestamp)
         
         fun bind(message: Message) {
+            // Make links clickable
+            messageText.autoLinkMask = android.text.util.Linkify.WEB_URLS or 
+                                       android.text.util.Linkify.EMAIL_ADDRESSES or
+                                       android.text.util.Linkify.PHONE_NUMBERS
             messageText.text = message.content
             
             // Show checkmark if message is delivered
@@ -109,6 +113,10 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         val timestamp: TextView = itemView.findViewById(R.id.tvTimestamp)
         
         fun bind(message: String) {
+            // Make links clickable
+            messageText.autoLinkMask = android.text.util.Linkify.WEB_URLS or 
+                                       android.text.util.Linkify.EMAIL_ADDRESSES or
+                                       android.text.util.Linkify.PHONE_NUMBERS
             messageText.text = message
             
             // Set long click listener for copying
