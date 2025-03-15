@@ -42,6 +42,8 @@ class MainActivity : Activity(), ReaderCallback {
     
     private var isInSendMode = false
     private var isInReceiveMode = false
+    private var lastSentMessage = ""
+    private var lastReceivedMessage = ""
     
     // For foreground dispatch
     private lateinit var pendingIntent: PendingIntent
@@ -90,10 +92,12 @@ class MainActivity : Activity(), ReaderCallback {
             isInReceiveMode = false
             updateModeIndicators()
             tvStatus.text = getString(R.string.status_send_mode)
-            Toast.makeText(this, "Send mode activated. Tap your phone to another NFC device.", Toast.LENGTH_SHORT).show()
+            
+            // Store the message to send
+            lastSentMessage = etMessage.text.toString()
             
             // Add the message to the chat as a sent message
-            messageAdapter.addSentMessage(etMessage.text.toString())
+            messageAdapter.addSentMessage(lastSentMessage)
             
             // Enable reader mode for sending data
             enableReaderMode()
@@ -104,7 +108,6 @@ class MainActivity : Activity(), ReaderCallback {
             isInSendMode = false
             updateModeIndicators()
             tvStatus.text = getString(R.string.status_receive_mode)
-            Toast.makeText(this, "Receive mode activated. Waiting for NFC data.", Toast.LENGTH_SHORT).show()
             
             // Disable reader mode and prepare to receive data via HCE
             disableReaderMode()
@@ -132,6 +135,11 @@ class MainActivity : Activity(), ReaderCallback {
                 Toast.makeText(this, "Nothing to paste", Toast.LENGTH_SHORT).show()
             }
         }
+        
+        // Start in receive mode by default
+        mainHandler.postDelayed({
+            btnReceiveMode.performClick()
+        }, 100)
     }
     
     private fun setupForegroundDispatch() {
@@ -211,11 +219,18 @@ class MainActivity : Activity(), ReaderCallback {
         // This is a critical function to ensure UI updates happen
         CardEmulationService.instance?.onDataReceivedListener = { receivedData ->
             Log.d(TAG, "Data received in MainActivity: $receivedData")
-            mainHandler.post {
-                // Update UI on the main thread
-                messageAdapter.addReceivedMessage(receivedData)
-                tvStatus.text = getString(R.string.message_received)
-                Toast.makeText(this, "Message received: $receivedData", Toast.LENGTH_SHORT).show()
+            
+            // Check if this is a duplicate message
+            if (receivedData != lastReceivedMessage) {
+                lastReceivedMessage = receivedData
+                
+                mainHandler.post {
+                    // Update UI on the main thread
+                    messageAdapter.addReceivedMessage(receivedData)
+                    tvStatus.text = getString(R.string.message_received)
+                }
+            } else {
+                Log.d(TAG, "Duplicate message received, ignoring: $receivedData")
             }
         }
     }
@@ -288,18 +303,20 @@ class MainActivity : Activity(), ReaderCallback {
             
             if (isInSendMode) {
                 // Send data to the HCE device
-                val message = etMessage.text.toString()
+                val message = lastSentMessage
                 val sendCommand = "SEND_DATA:$message".toByteArray(Charset.forName("UTF-8"))
                 val sendResult = isoDep.transceive(sendCommand)
                 
                 if (isSuccess(sendResult)) {
                     runOnUiThread {
                         tvStatus.text = getString(R.string.message_sent)
-                        Toast.makeText(this, "Message sent successfully!", Toast.LENGTH_SHORT).show()
                         
                         // Mark the last sent message as delivered
                         val lastPosition = messageAdapter.getItemCount() - 1
                         messageAdapter.markMessageAsDelivered(lastPosition)
+                        
+                        // Clear the sent message to prevent re-sending
+                        lastSentMessage = ""
                         
                         // Switch to receive mode automatically
                         isInSendMode = false
@@ -333,10 +350,16 @@ class MainActivity : Activity(), ReaderCallback {
                     val dataBytes = getResult.copyOfRange(0, getResult.size - 2)
                     val receivedMessage = String(dataBytes, Charset.forName("UTF-8"))
                     
-                    runOnUiThread {
-                        messageAdapter.addReceivedMessage(receivedMessage)
-                        tvStatus.text = getString(R.string.message_received)
-                        Toast.makeText(this, "Message received!", Toast.LENGTH_SHORT).show()
+                    // Check if this is a duplicate message
+                    if (receivedMessage != lastReceivedMessage) {
+                        lastReceivedMessage = receivedMessage
+                        
+                        runOnUiThread {
+                            messageAdapter.addReceivedMessage(receivedMessage)
+                            tvStatus.text = getString(R.string.message_received)
+                        }
+                    } else {
+                        Log.d(TAG, "Duplicate message received, ignoring: $receivedMessage")
                     }
                 }
             }
