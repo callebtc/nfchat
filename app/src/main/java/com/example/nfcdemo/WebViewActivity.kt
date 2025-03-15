@@ -206,6 +206,10 @@ class WebViewActivity : Activity() {
     override fun onDestroy() {
         // Clear WebView cache and cookies
         clearWebViewCache()
+        
+        // Properly destroy the WebView
+        destroyWebView()
+        
         super.onDestroy()
     }
     
@@ -216,5 +220,37 @@ class WebViewActivity : Activity() {
         webView.clearCache(true)
         android.webkit.CookieManager.getInstance().removeAllCookies(null)
         android.webkit.CookieManager.getInstance().flush()
+    }
+    
+    /**
+     * Properly destroy the WebView to prevent memory leaks and background processes
+     */
+    private fun destroyWebView() {
+        // Remove the WebView from its parent view before destroying
+        val parent = webView.parent as? android.view.ViewGroup
+        parent?.removeView(webView)
+        
+        // Stop loading, clear history
+        webView.stopLoading()
+        webView.clearHistory()
+        
+        // Clear form data and all other state
+        webView.clearFormData()
+        webView.clearSslPreferences()
+        
+        // Destroy the WebView
+        webView.destroy()
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Pause JavaScript execution and WebView processing when activity is not visible
+        webView.onPause()
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Resume JavaScript execution and WebView processing when activity becomes visible
+        webView.onResume()
     }
 } 

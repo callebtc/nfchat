@@ -3,13 +3,19 @@ package com.example.nfcdemo
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
+import android.text.Layout
+import android.text.Selection
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.TextPaint
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
+import android.text.style.URLSpan
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
@@ -17,6 +23,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import com.example.nfcdemo.data.MessageDbHelper
+import com.example.nfcdemo.data.SettingsContract
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -42,6 +49,64 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
 
     private val messages = mutableListOf<Message>()
     private val dbHelper = MessageDbHelper(context)
+    
+    // Custom LinkMovementMethod to handle link clicks
+    private val customLinkMovementMethod = object : LinkMovementMethod() {
+        override fun onTouchEvent(widget: TextView, buffer: android.text.Spannable, event: MotionEvent): Boolean {
+            val action = event.action
+            
+            if (action == MotionEvent.ACTION_UP) {
+                var x = event.x.toInt()
+                var y = event.y.toInt()
+                
+                x -= widget.totalPaddingLeft
+                y -= widget.totalPaddingTop
+                
+                x += widget.scrollX
+                y += widget.scrollY
+                
+                val layout = widget.layout
+                val line = layout.getLineForVertical(y)
+                val off = layout.getOffsetForHorizontal(line, x.toFloat())
+                
+                val links = buffer.getSpans(off, off, URLSpan::class.java)
+                if (links.isNotEmpty()) {
+                    val url = links[0].url
+                    return handleLinkClick(url)
+                }
+            }
+            
+            return super.onTouchEvent(widget, buffer, event)
+        }
+        
+        private fun handleLinkClick(url: String): Boolean {
+            // Check if we should use the internal browser
+            val useInternalBrowser = dbHelper.getBooleanSetting(
+                SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
+                false
+            )
+            
+            // Prepend http:// if the URL doesn't have a scheme
+            val fullUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                "http://$url"
+            } else {
+                url
+            }
+            
+            if (useInternalBrowser) {
+                // Open the URL in an internal WebView
+                val intent = Intent(context, WebViewActivity::class.java)
+                intent.putExtra(WebViewActivity.EXTRA_URL, fullUrl)
+                context.startActivity(intent)
+            } else {
+                // Open the URL in an external browser
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
+                context.startActivity(intent)
+            }
+            
+            return true
+        }
+    }
 
     init {
         // Load message history from database when adapter is created
@@ -197,8 +262,8 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
             val spannableText = createTruncatedText(message, adapterPosition)
             messageText.text = spannableText
             
-            // Enable clickable spans
-            messageText.movementMethod = LinkMovementMethod.getInstance()
+            // Enable clickable spans with our custom movement method
+            messageText.movementMethod = customLinkMovementMethod
             
             // Show checkmark if message is delivered
             sentCheck.visibility = if (message.isDelivered) View.VISIBLE else View.GONE
@@ -225,8 +290,8 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
             val spannableText = createTruncatedText(message, adapterPosition)
             messageText.text = spannableText
             
-            // Enable clickable spans
-            messageText.movementMethod = LinkMovementMethod.getInstance()
+            // Enable clickable spans with our custom movement method
+            messageText.movementMethod = customLinkMovementMethod
             
             // Set long click listener for copying
             itemView.setOnLongClickListener {
