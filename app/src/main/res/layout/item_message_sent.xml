@@ -23,14 +23,30 @@
             android:textSize="14sp"
             android:fontFamily="monospace"/>
 
-        <ImageView
-            android:id="@+id/ivSentCheck"
-            android:layout_width="16dp"
-            android:layout_height="16dp"
-            android:src="@drawable/ic_check"
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
             android:layout_gravity="end"
-            android:layout_marginTop="4dp"
-            android:visibility="gone"
-            android:contentDescription="Message sent successfully"/>
+            android:layout_marginTop="4dp">
+            
+            <TextView
+                android:id="@+id/tvTimestamp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_timestamp"
+                android:textSize="10sp"
+                android:layout_marginEnd="4dp"/>
+                
+            <ImageView
+                android:id="@+id/ivSentCheck"
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:src="@drawable/ic_check"
+                android:layout_gravity="end"
+                android:layout_marginTop="4dp"
+                android:visibility="gone"
+                android:contentDescription="Message sent successfully"/>
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout> 

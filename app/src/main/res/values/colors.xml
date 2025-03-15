@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Monochromatic Theme Colors -->
-    <color name="primary">#2196F3</color>
-    <color name="primary_dark">#1976D2</color>
-    <color name="primary_darker">#0D47A1</color>
-    <color name="accent">#FF4081</color>
-    <color name="accent_light">#E0E0E0</color>
+    <color name="primary">#424242</color>
+    <color name="primary_dark">#212121</color>
+    <color name="primary_darker">#121212</color>
+    <color name="accent">#FFFFFF</color>
+    <color name="accent_light">#EEEEEE</color>
     
     <color name="background_dark">#121212</color>
     <color name="background_dark_lighter">#1E1E1E</color>
@@ -26,4 +26,14 @@
     <color name="button_enabled">#2196F3</color>
     <color name="button_disabled">#424242</color>
     <color name="button_pressed">#1976D2</color>
+    
+    <!-- New colors for the updated item_message_sent.xml -->
+    <color name="send_button_enabled">#424242</color>
+    <color name="send_button_disabled">#2A2A2A</color>
+    <color name="send_button_pressed">#555555</color>
+    
+    <!-- Dark theme colors -->
+    <color name="chat_background">#0A0A0A</color>
+    <color name="toolbar_background">#1E1E1E</color>
+    <color name="text_timestamp">#66FFFFFF</color> <!-- 40% white -->
 </resources>

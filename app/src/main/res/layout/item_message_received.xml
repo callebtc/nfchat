@@ -9,7 +9,7 @@
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:background="@drawable/message_received_background"
         android:padding="12dp"
         android:layout_marginEnd="48dp"
@@ -22,5 +22,14 @@
             android:textColor="@color/text_primary_dark"
             android:textSize="14sp"
             android:fontFamily="monospace"/>
+            
+        <TextView
+            android:id="@+id/tvTimestamp"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_timestamp"
+            android:textSize="10sp"
+            android:layout_gravity="end"
+            android:layout_marginTop="4dp"/>
     </LinearLayout>
 </LinearLayout> 

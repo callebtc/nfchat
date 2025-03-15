@@ -2,13 +2,13 @@
     <!-- Base application theme. -->
     <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
         <!-- Customize your theme here. -->
-        <item name="colorPrimary">@color/background_dark</item>
-        <item name="colorPrimaryDark">@color/background_dark</item>
+        <item name="colorPrimary">@color/toolbar_background</item>
+        <item name="colorPrimaryDark">@color/toolbar_background</item>
         <item name="colorAccent">@color/text_primary_dark</item>
-        <item name="android:windowBackground">@color/background_dark</item>
+        <item name="android:windowBackground">@color/chat_background</item>
         <item name="android:textColorPrimary">@color/text_primary_dark</item>
         <item name="android:textColorSecondary">@color/text_secondary_dark</item>
-        <item name="android:statusBarColor">@color/background_dark</item>
-        <item name="android:navigationBarColor">@color/background_dark</item>
+        <item name="android:statusBarColor">@color/toolbar_background</item>
+        <item name="android:navigationBarColor">@color/chat_background</item>
     </style>
 </resources> 

@@ -18,15 +18,18 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.Log
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import java.io.IOException
 import java.nio.charset.Charset
+import java.io.IOException
 
 class MainActivity : Activity(), ReaderCallback {
 
@@ -77,6 +80,18 @@ class MainActivity : Activity(), ReaderCallback {
         
         // Set up NFC foreground dispatch system
         setupForegroundDispatch()
+
+        // Add text watcher to enable/disable send button
+        etMessage.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            
+            override fun afterTextChanged(s: Editable?) {
+                btnSendMode.isEnabled = !s.isNullOrEmpty()
+                findViewById<ImageView>(R.id.ivSendIcon).alpha = if (!s.isNullOrEmpty()) 1.0f else 0.5f
+            }
+        })
 
         // Set up button click listeners
         btnSendMode.setOnClickListener {

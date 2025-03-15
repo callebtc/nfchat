@@ -10,6 +10,9 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MessageAdapter(private val context: Context) : 
     RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -22,14 +25,15 @@ class MessageAdapter(private val context: Context) :
     data class Message(
         val content: String, 
         val isSent: Boolean,
-        var isDelivered: Boolean = false
+        var isDelivered: Boolean = false,
+        val timestamp: Date = Date()
     )
     
     private val messages = mutableListOf<Message>()
     
     fun addSentMessage(message: String): Int {
         val position = messages.size
-        messages.add(Message(message, true))
+        messages.add(Message(message, true, false, Date()))
         notifyItemInserted(position)
         return position
     }
@@ -42,7 +46,7 @@ class MessageAdapter(private val context: Context) :
     }
     
     fun addReceivedMessage(message: String) {
-        messages.add(Message(message, false))
+        messages.add(Message(message, false, false, Date()))
         notifyItemInserted(messages.size - 1)
     }
     
@@ -67,24 +71,36 @@ class MessageAdapter(private val context: Context) :
     
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         val message = messages[position]
+        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val timeString = timeFormat.format(message.timestamp)
         
         when (holder) {
-            is SentMessageViewHolder -> holder.bind(message)
-            is ReceivedMessageViewHolder -> holder.bind(message.content)
+            is SentMessageViewHolder -> {
+                val sentHolder = holder as SentMessageViewHolder
+                sentHolder.messageText.text = message.content
+                sentHolder.sentCheck.visibility = if (message.isDelivered) View.VISIBLE else View.GONE
+                sentHolder.timestamp.text = timeString
+            }
+            is ReceivedMessageViewHolder -> {
+                val receivedHolder = holder as ReceivedMessageViewHolder
+                receivedHolder.messageText.text = message.content
+                receivedHolder.timestamp.text = timeString
+            }
         }
     }
     
     override fun getItemCount(): Int = messages.size
     
     inner class SentMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val tvMessageContent: TextView = itemView.findViewById(R.id.tvMessageContent)
-        private val ivSentCheck: ImageView = itemView.findViewById(R.id.ivSentCheck)
+        val messageText: TextView = itemView.findViewById(R.id.tvMessageContent)
+        val sentCheck: ImageView = itemView.findViewById(R.id.ivSentCheck)
+        val timestamp: TextView = itemView.findViewById(R.id.tvTimestamp)
         
         fun bind(message: Message) {
-            tvMessageContent.text = message.content
+            messageText.text = message.content
             
             // Show checkmark if message is delivered
-            ivSentCheck.visibility = if (message.isDelivered) View.VISIBLE else View.GONE
+            sentCheck.visibility = if (message.isDelivered) View.VISIBLE else View.GONE
             
             // Set long click listener for copying
             itemView.setOnLongClickListener {
@@ -95,10 +111,11 @@ class MessageAdapter(private val context: Context) :
     }
     
     inner class ReceivedMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val tvMessageContent: TextView = itemView.findViewById(R.id.tvMessageContent)
+        val messageText: TextView = itemView.findViewById(R.id.tvMessageContent)
+        val timestamp: TextView = itemView.findViewById(R.id.tvTimestamp)
         
         fun bind(message: String) {
-            tvMessageContent.text = message
+            messageText.text = message
             
             // Set long click listener for copying
             itemView.setOnLongClickListener {
