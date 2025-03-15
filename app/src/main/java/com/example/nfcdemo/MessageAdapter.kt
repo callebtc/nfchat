@@ -12,29 +12,58 @@ import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 
 class MessageAdapter(private val context: Context) : 
-    RecyclerView.Adapter<MessageAdapter.MessageViewHolder>() {
+    RecyclerView.Adapter<RecyclerView.ViewHolder>() {
     
-    private val messages = mutableListOf<String>()
+    companion object {
+        private const val VIEW_TYPE_SENT = 1
+        private const val VIEW_TYPE_RECEIVED = 2
+    }
     
-    fun addMessage(message: String) {
-        messages.add(message)
+    data class Message(val content: String, val isSent: Boolean)
+    
+    private val messages = mutableListOf<Message>()
+    
+    fun addSentMessage(message: String) {
+        messages.add(Message(message, true))
         notifyItemInserted(messages.size - 1)
     }
     
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_message, parent, false)
-        return MessageViewHolder(view)
+    fun addReceivedMessage(message: String) {
+        messages.add(Message(message, false))
+        notifyItemInserted(messages.size - 1)
     }
     
-    override fun onBindViewHolder(holder: MessageViewHolder, position: Int) {
+    override fun getItemViewType(position: Int): Int {
+        return if (messages[position].isSent) VIEW_TYPE_SENT else VIEW_TYPE_RECEIVED
+    }
+    
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        return when (viewType) {
+            VIEW_TYPE_SENT -> {
+                val view = LayoutInflater.from(parent.context)
+                    .inflate(R.layout.item_message_sent, parent, false)
+                SentMessageViewHolder(view)
+            }
+            else -> {
+                val view = LayoutInflater.from(parent.context)
+                    .inflate(R.layout.item_message_received, parent, false)
+                ReceivedMessageViewHolder(view)
+            }
+        }
+    }
+    
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         val message = messages[position]
-        holder.bind(message)
+        
+        when (holder) {
+            is SentMessageViewHolder -> holder.bind(message.content)
+            is ReceivedMessageViewHolder -> holder.bind(message.content)
+        }
     }
     
     override fun getItemCount(): Int = messages.size
     
-    inner class MessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+    inner class SentMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val tvMessageContent: TextView = itemView.findViewById(R.id.tvMessageContent)
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btnCopy)
         
@@ -42,11 +71,28 @@ class MessageAdapter(private val context: Context) :
             tvMessageContent.text = message
             
             btnCopy.setOnClickListener {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("NFC Message", message)
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(context, context.getString(R.string.message_copied), Toast.LENGTH_SHORT).show()
+                copyToClipboard(message)
             }
         }
+    }
+    
+    inner class ReceivedMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val tvMessageContent: TextView = itemView.findViewById(R.id.tvMessageContent)
+        private val btnCopy: ImageButton = itemView.findViewById(R.id.btnCopy)
+        
+        fun bind(message: String) {
+            tvMessageContent.text = message
+            
+            btnCopy.setOnClickListener {
+                copyToClipboard(message)
+            }
+        }
+    }
+    
+    private fun copyToClipboard(message: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("NFC Message", message)
+        clipboard.setPrimaryClip(clip)
+        Toast.makeText(context, context.getString(R.string.message_copied), Toast.LENGTH_SHORT).show()
     }
 } 

@@ -53,7 +53,9 @@ class MainActivity : Activity(), ReaderCallback {
         
         // Set up RecyclerView
         messageAdapter = MessageAdapter(this)
-        rvMessages.layoutManager = LinearLayoutManager(this)
+        rvMessages.layoutManager = LinearLayoutManager(this).apply {
+            stackFromEnd = true // Messages appear from bottom
+        }
         rvMessages.adapter = messageAdapter
 
         // Initialize NFC
@@ -78,6 +80,9 @@ class MainActivity : Activity(), ReaderCallback {
             updateModeIndicators()
             tvStatus.text = getString(R.string.status_send_mode)
             Toast.makeText(this, "Send mode activated. Tap your phone to another NFC device.", Toast.LENGTH_SHORT).show()
+            
+            // Add the message to the chat as a sent message
+            messageAdapter.addSentMessage(etMessage.text.toString())
             
             // Enable reader mode for sending data
             enableReaderMode()
@@ -122,7 +127,7 @@ class MainActivity : Activity(), ReaderCallback {
             Log.d(TAG, "Data received in MainActivity: $receivedData")
             mainHandler.post {
                 // Update UI on the main thread
-                messageAdapter.addMessage(receivedData)
+                messageAdapter.addReceivedMessage(receivedData)
                 tvStatus.text = getString(R.string.message_received)
                 Toast.makeText(this, "Message received: $receivedData", Toast.LENGTH_SHORT).show()
             }
@@ -132,10 +137,6 @@ class MainActivity : Activity(), ReaderCallback {
     private fun updateModeIndicators() {
         btnSendMode.isSelected = isInSendMode
         btnReceiveMode.isSelected = isInReceiveMode
-        
-        // Apply the button selectors
-        btnSendMode.background = getDrawable(R.drawable.send_button_selector)
-        btnReceiveMode.background = getDrawable(R.drawable.receive_button_selector)
     }
 
     override fun onResume() {
@@ -221,7 +222,7 @@ class MainActivity : Activity(), ReaderCallback {
                     val receivedMessage = String(dataBytes, Charset.forName("UTF-8"))
                     
                     runOnUiThread {
-                        messageAdapter.addMessage(receivedMessage)
+                        messageAdapter.addReceivedMessage(receivedMessage)
                         tvStatus.text = getString(R.string.message_received)
                         Toast.makeText(this, "Message received!", Toast.LENGTH_SHORT).show()
                     }
