@@ -1,0 +1,15 @@
+<resources>
+    <!-- Dark application theme. -->
+    <style name="Theme.NFCDemo" parent="android:Theme.Material.NoActionBar">
+        <!-- Primary brand color. -->
+        <item name="android:colorPrimary">@color/primary_dark</item>
+        <item name="android:colorPrimaryDark">@color/primary_darker</item>
+        <item name="android:colorAccent">@color/accent_light</item>
+        <!-- Status bar color. -->
+        <item name="android:statusBarColor">@color/primary_darker</item>
+        <!-- Background color. -->
+        <item name="android:windowBackground">@color/background_dark</item>
+        <item name="android:textColorPrimary">@color/text_primary_dark</item>
+        <item name="android:textColorSecondary">@color/text_secondary_dark</item>
+    </style>
+</resources> 

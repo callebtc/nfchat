@@ -1,16 +1,15 @@
 package com.example.nfcdemo
 
 import android.app.Activity
-import android.content.ComponentName
 import android.content.Intent
-import android.content.ServiceConnection
 import android.nfc.NfcAdapter
 import android.nfc.NfcAdapter.ReaderCallback
 import android.nfc.Tag
 import android.nfc.TagLostException
 import android.nfc.tech.IsoDep
 import android.os.Bundle
-import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Button
 import android.widget.EditText
@@ -22,6 +21,7 @@ import java.nio.charset.Charset
 class MainActivity : Activity(), ReaderCallback {
 
     private val TAG = "MainActivity"
+    private val mainHandler = Handler(Looper.getMainLooper())
     
     private var nfcAdapter: NfcAdapter? = null
     private lateinit var etMessage: EditText
@@ -62,6 +62,7 @@ class MainActivity : Activity(), ReaderCallback {
             
             isInSendMode = true
             isInReceiveMode = false
+            updateModeIndicators()
             tvStatus.text = getString(R.string.status_send_mode)
             Toast.makeText(this, "Send mode activated. Tap your phone to another NFC device.", Toast.LENGTH_SHORT).show()
             
@@ -72,24 +73,45 @@ class MainActivity : Activity(), ReaderCallback {
         btnReceiveMode.setOnClickListener {
             isInReceiveMode = true
             isInSendMode = false
+            updateModeIndicators()
             tvStatus.text = getString(R.string.status_receive_mode)
             Toast.makeText(this, "Receive mode activated. Waiting for NFC data.", Toast.LENGTH_SHORT).show()
             
             // Disable reader mode and prepare to receive data via HCE
             disableReaderMode()
             
-            // Set the message to be shared in the HCE service
-            val messageToShare = etMessage.text.toString()
-            CardEmulationService().messageToShare = messageToShare
+            // Start the CardEmulationService
+            val intent = Intent(this, CardEmulationService::class.java)
+            startService(intent)
             
-            // Set up listener for received data
-            CardEmulationService().onDataReceivedListener = { receivedData ->
-                runOnUiThread {
-                    tvReceived.text = receivedData
-                    tvStatus.text = getString(R.string.message_received)
-                }
+            // Set up the message and listener
+            CardEmulationService.instance?.messageToShare = etMessage.text.toString()
+            
+            // Set up a global data receiver that will update the UI
+            setupDataReceiver()
+        }
+    }
+    
+    private fun setupDataReceiver() {
+        // This is a critical function to ensure UI updates happen
+        CardEmulationService.instance?.onDataReceivedListener = { receivedData ->
+            Log.d(TAG, "Data received in MainActivity: $receivedData")
+            mainHandler.post {
+                // Update UI on the main thread
+                tvReceived.text = receivedData
+                tvStatus.text = getString(R.string.message_received)
+                Toast.makeText(this, "Message received: $receivedData", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+    
+    private fun updateModeIndicators() {
+        btnSendMode.isSelected = isInSendMode
+        btnReceiveMode.isSelected = isInReceiveMode
+        
+        // Apply the button selectors
+        btnSendMode.background = getDrawable(R.drawable.send_button_selector)
+        btnReceiveMode.background = getDrawable(R.drawable.receive_button_selector)
     }
 
     override fun onResume() {
@@ -97,11 +119,27 @@ class MainActivity : Activity(), ReaderCallback {
         if (isInSendMode) {
             enableReaderMode()
         }
+        
+        // Update the service with the latest message if in receive mode
+        if (isInReceiveMode) {
+            CardEmulationService.instance?.messageToShare = etMessage.text.toString()
+            // Re-establish the data receiver connection
+            setupDataReceiver()
+        }
     }
 
     override fun onPause() {
         super.onPause()
         disableReaderMode()
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // If we're not in receive mode anymore, stop the service
+        if (!isInReceiveMode) {
+            val intent = Intent(this, CardEmulationService::class.java)
+            stopService(intent)
+        }
     }
 
     private fun enableReaderMode() {
@@ -141,6 +179,7 @@ class MainActivity : Activity(), ReaderCallback {
                 if (isSuccess(sendResult)) {
                     runOnUiThread {
                         tvStatus.text = getString(R.string.message_sent)
+                        Toast.makeText(this, "Message sent successfully!", Toast.LENGTH_SHORT).show()
                     }
                 } else {
                     runOnUiThread {
@@ -160,6 +199,7 @@ class MainActivity : Activity(), ReaderCallback {
                     runOnUiThread {
                         tvReceived.text = receivedMessage
                         tvStatus.text = getString(R.string.message_received)
+                        Toast.makeText(this, "Message received!", Toast.LENGTH_SHORT).show()
                     }
                 }
             }

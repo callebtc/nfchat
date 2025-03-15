@@ -4,7 +4,6 @@ import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
 import android.util.Log
 import java.nio.charset.Charset
-import java.util.*
 
 class CardEmulationService : HostApduService() {
     
@@ -41,6 +40,9 @@ class CardEmulationService : HostApduService() {
             }
             return data
         }
+        
+        // Static instance of the service for communication
+        var instance: CardEmulationService? = null
     }
     
     // Message to be shared when requested
@@ -48,6 +50,18 @@ class CardEmulationService : HostApduService() {
     
     // Callback to notify MainActivity when data is received
     var onDataReceivedListener: ((String) -> Unit)? = null
+    
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+        Log.d(TAG, "CardEmulationService created")
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        instance = null
+        Log.d(TAG, "CardEmulationService destroyed")
+    }
     
     override fun processCommandApdu(commandApdu: ByteArray, extras: Bundle?): ByteArray {
         Log.d(TAG, "Received APDU: ${commandApdu.toHex()}")
