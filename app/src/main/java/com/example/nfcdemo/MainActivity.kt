@@ -279,6 +279,8 @@ class MainActivity : Activity(), ReaderCallback {
     
     override fun onDestroy() {
         super.onDestroy()
+        // Clean up database resources
+        messageAdapter.cleanup()
         // If we're not in receive mode anymore, stop the service
         if (!isInReceiveMode) {
             val intent = Intent(this, CardEmulationService::class.java)
