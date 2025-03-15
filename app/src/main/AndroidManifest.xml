@@ -7,17 +7,18 @@
     <uses-feature android:name="android.hardware.nfc.hce" android:required="true" />
 
     <application
-        android:label="NFC Demo"
+        android:label="NFC Chat"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:theme="@style/Theme.NFCDemo">
+        android:theme="@style/AppTheme">
         
-        <activity android:name=".MainActivity"
+        <activity
+            android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
         

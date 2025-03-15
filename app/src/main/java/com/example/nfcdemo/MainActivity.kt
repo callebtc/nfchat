@@ -15,6 +15,9 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -93,6 +96,9 @@ class MainActivity : Activity(), ReaderCallback {
             // Add the message to the chat as a sent message
             messageAdapter.addSentMessage(etMessage.text.toString())
             scrollToBottom()
+            
+            // Clear the input field after sending
+            etMessage.text.clear()
             
             // Enable reader mode for sending data
             enableReaderMode()
@@ -204,6 +210,9 @@ class MainActivity : Activity(), ReaderCallback {
                     messageAdapter.addReceivedMessage(receivedData)
                     tvStatus.text = getString(R.string.message_received)
                     scrollToBottom()
+                    
+                    // Vibrate on message received
+                    vibrate(200)
                 }
             } else {
                 Log.d(TAG, "Duplicate message received, ignoring: $receivedData")
@@ -289,6 +298,9 @@ class MainActivity : Activity(), ReaderCallback {
                         val lastPosition = messageAdapter.getItemCount() - 1
                         messageAdapter.markMessageAsDelivered(lastPosition)
                         
+                        // Vibrate on message sent
+                        vibrate(200)
+                        
                         // Clear the sent message to prevent re-sending
                         lastSentMessage = ""
                         
@@ -333,6 +345,9 @@ class MainActivity : Activity(), ReaderCallback {
                             messageAdapter.addReceivedMessage(receivedMessage)
                             tvStatus.text = getString(R.string.message_received)
                             scrollToBottom()
+                            
+                            // Vibrate on message received
+                            vibrate(200)
                         }
                     } else {
                         Log.d(TAG, "Duplicate message received, ignoring: $receivedMessage")
@@ -397,6 +412,27 @@ class MainActivity : Activity(), ReaderCallback {
     private fun scrollToBottom() {
         rvMessages.post {
             rvMessages.smoothScrollToPosition(messageAdapter.itemCount - 1)
+        }
+    }
+    
+    private fun vibrate(duration: Long) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                val vibrator = vibratorManager.defaultVibrator
+                vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(duration)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error vibrating: ${e.message}")
         }
     }
 }
