@@ -76,6 +76,20 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             put(SettingsContract.SettingsEntry.COLUMN_VALUE, "false")
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, closeAfterSharedSendValues)
+        
+        // Default max chunk size is 500 characters
+        val maxChunkSizeValues = ContentValues().apply {
+            put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_MAX_CHUNK_SIZE)
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "500")
+        }
+        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, maxChunkSizeValues)
+        
+        // Default chunk delay is 200ms
+        val chunkDelayValues = ContentValues().apply {
+            put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_CHUNK_DELAY)
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "200")
+        }
+        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, chunkDelayValues)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {

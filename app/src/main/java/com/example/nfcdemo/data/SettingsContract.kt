@@ -16,5 +16,9 @@ object SettingsContract {
         const val KEY_AUTO_OPEN_LINKS = "auto_open_links"
         const val KEY_AUTO_SEND_SHARED = "auto_send_shared"
         const val KEY_CLOSE_AFTER_SHARED_SEND = "close_after_shared_send"
+        
+        // Advanced settings keys for chunked message transfer
+        const val KEY_MAX_CHUNK_SIZE = "max_chunk_size"
+        const val KEY_CHUNK_DELAY = "chunk_delay"
     }
 } 
