@@ -57,6 +57,9 @@ class MainActivity : Activity(), ReaderCallback {
     // Default message length limit before truncation
     private var messageLengthLimit = 200
     
+    // Track if the app was opened via share intent
+    private var openedViaShareIntent = false
+    
     // For foreground dispatch
     private lateinit var pendingIntent: PendingIntent
     private lateinit var intentFilters: Array<IntentFilter>
@@ -403,6 +406,25 @@ class MainActivity : Activity(), ReaderCallback {
                         // Vibrate on message sent
                         vibrate(200)
                         
+                        // Check if we should close the app after sending a shared message
+                        if (openedViaShareIntent) {
+                            val closeAfterSharedSend = dbHelper.getBooleanSetting(
+                                SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND, 
+                                false
+                            )
+                            
+                            if (closeAfterSharedSend) {
+                                // Show a toast to inform the user
+                                Toast.makeText(this, "Message sent successfully. Closing app.", Toast.LENGTH_SHORT).show()
+                                
+                                // Close the app after a short delay
+                                mainHandler.postDelayed({
+                                    finish()
+                                }, 1000)
+                                return@runOnUiThread
+                            }
+                        }
+                        
                         // Clear the sent message to prevent re-sending
                         lastSentMessage = ""
                         
@@ -549,6 +571,9 @@ class MainActivity : Activity(), ReaderCallback {
         if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
             Log.d(TAG, "Handling share intent: ${intent.action}, type: ${intent.type}")
             
+            // Mark that we were opened via share intent
+            openedViaShareIntent = true
+            
             // Extract the shared text
             val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
             if (!sharedText.isNullOrEmpty()) {
@@ -557,37 +582,48 @@ class MainActivity : Activity(), ReaderCallback {
                 // Set the shared text in the message field
                 etMessage.setText(sharedText)
                 
-                // Show a toast to inform the user
-                Toast.makeText(this, "Text received. Preparing to send via NFC.", Toast.LENGTH_LONG).show()
+                // Check if auto-send is enabled
+                val autoSendShared = dbHelper.getBooleanSetting(
+                    SettingsContract.SettingsEntry.KEY_AUTO_SEND_SHARED, 
+                    true
+                )
                 
-                // Automatically prepare to send the shared text
-                mainHandler.postDelayed({
-                    // Only proceed if the text is still there (user hasn't cleared it)
-                    if (!etMessage.text.isNullOrEmpty()) {
-                        Log.d(TAG, "Auto-sending shared text")
-                        
-                        // Store the message to send
-                        lastSentMessage = etMessage.text.toString()
-                        
-                        // Add the message to the chat as a sent message
-                        messageAdapter.addSentMessage(lastSentMessage)
-                        scrollToBottom()
-                        
-                        // Clear the input field after sending
-                        etMessage.text.clear()
-                        
-                        // Switch to send mode
-                        isInSendMode = true
-                        isInReceiveMode = false
-                        updateModeIndicators()
-                        tvStatus.text = getString(R.string.status_send_mode)
-                        
-                        // Enable reader mode for sending data
-                        enableReaderMode()
-                    } else {
-                        Log.d(TAG, "Text field is empty, not auto-sending")
-                    }
-                }, 500) // Short delay to ensure UI is ready
+                if (autoSendShared) {
+                    // Show a toast to inform the user
+                    Toast.makeText(this, "Text received. Preparing to send via NFC.", Toast.LENGTH_LONG).show()
+                    
+                    // Automatically prepare to send the shared text
+                    mainHandler.postDelayed({
+                        // Only proceed if the text is still there (user hasn't cleared it)
+                        if (!etMessage.text.isNullOrEmpty()) {
+                            Log.d(TAG, "Auto-sending shared text")
+                            
+                            // Store the message to send
+                            lastSentMessage = etMessage.text.toString()
+                            
+                            // Add the message to the chat as a sent message
+                            messageAdapter.addSentMessage(lastSentMessage)
+                            scrollToBottom()
+                            
+                            // Clear the input field after sending
+                            etMessage.text.clear()
+                            
+                            // Switch to send mode
+                            isInSendMode = true
+                            isInReceiveMode = false
+                            updateModeIndicators()
+                            tvStatus.text = getString(R.string.status_send_mode)
+                            
+                            // Enable reader mode for sending data
+                            enableReaderMode()
+                        } else {
+                            Log.d(TAG, "Text field is empty, not auto-sending")
+                        }
+                    }, 500) // Short delay to ensure UI is ready
+                } else {
+                    // Just show a toast that the text is ready to send
+                    Toast.makeText(this, "Text received. Press send when ready.", Toast.LENGTH_LONG).show()
+                }
             } else {
                 Log.d(TAG, "Shared text is null or empty")
             }
@@ -597,6 +633,9 @@ class MainActivity : Activity(), ReaderCallback {
     }
 
     private fun startInReceiveMode() {
+        // Reset the share intent flag since we're starting normally
+        openedViaShareIntent = false
+        
         mainHandler.postDelayed({
             // Only switch to receive mode if we're not already in send mode
             if (!isInSendMode) {

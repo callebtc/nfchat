@@ -11,6 +11,8 @@ class SettingsActivity : Activity() {
     
     private lateinit var dbHelper: MessageDbHelper
     private lateinit var cbAutoOpenLinks: CheckBox
+    private lateinit var cbAutoSendShared: CheckBox
+    private lateinit var cbCloseAfterSharedSend: CheckBox
     private lateinit var btnBack: ImageView
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,6 +24,8 @@ class SettingsActivity : Activity() {
         
         // Initialize views
         cbAutoOpenLinks = findViewById(R.id.cbAutoOpenLinks)
+        cbAutoSendShared = findViewById(R.id.cbAutoSendShared)
+        cbCloseAfterSharedSend = findViewById(R.id.cbCloseAfterSharedSend)
         btnBack = findViewById(R.id.btnBack)
         
         // Load current settings
@@ -38,6 +42,20 @@ class SettingsActivity : Activity() {
             true
         )
         cbAutoOpenLinks.isChecked = autoOpenLinks
+        
+        // Load auto send shared setting
+        val autoSendShared = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_AUTO_SEND_SHARED, 
+            true
+        )
+        cbAutoSendShared.isChecked = autoSendShared
+        
+        // Load close after shared send setting
+        val closeAfterSharedSend = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND, 
+            false
+        )
+        cbCloseAfterSharedSend.isChecked = closeAfterSharedSend
     }
     
     private fun setupListeners() {
@@ -50,6 +68,22 @@ class SettingsActivity : Activity() {
         cbAutoOpenLinks.setOnCheckedChangeListener { _, isChecked ->
             dbHelper.setBooleanSetting(
                 SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS,
+                isChecked
+            )
+        }
+        
+        // Auto send shared checkbox
+        cbAutoSendShared.setOnCheckedChangeListener { _, isChecked ->
+            dbHelper.setBooleanSetting(
+                SettingsContract.SettingsEntry.KEY_AUTO_SEND_SHARED,
+                isChecked
+            )
+        }
+        
+        // Close after shared send checkbox
+        cbCloseAfterSharedSend.setOnCheckedChangeListener { _, isChecked ->
+            dbHelper.setBooleanSetting(
+                SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND,
                 isChecked
             )
         }

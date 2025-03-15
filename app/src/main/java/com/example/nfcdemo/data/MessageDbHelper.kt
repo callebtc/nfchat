@@ -19,7 +19,7 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         private const val TAG = "MessageDbHelper"
         
         // If you change the database schema, you must increment the database version
-        const val DATABASE_VERSION = 2
+        const val DATABASE_VERSION = 3
         const val DATABASE_NAME = "Messages.db"
 
         // SQL statement to create the messages table - not using const because it uses string interpolation
@@ -57,12 +57,25 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
     
     private fun insertDefaultSettings(db: SQLiteDatabase) {
         // Auto open links is enabled by default
-        val values = ContentValues().apply {
+        val autoOpenLinksValues = ContentValues().apply {
             put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS)
             put(SettingsContract.SettingsEntry.COLUMN_VALUE, "true")
         }
+        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, autoOpenLinksValues)
         
-        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, values)
+        // Auto send shared content is enabled by default
+        val autoSendSharedValues = ContentValues().apply {
+            put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_AUTO_SEND_SHARED)
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "true")
+        }
+        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, autoSendSharedValues)
+        
+        // Close after sending shared message is disabled by default
+        val closeAfterSharedSendValues = ContentValues().apply {
+            put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND)
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "false")
+        }
+        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, closeAfterSharedSendValues)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -74,6 +87,22 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 // Upgrade from version 1 to 2 - Add settings table
                 db.execSQL(SQL_CREATE_SETTINGS_TABLE)
                 insertDefaultSettings(db)
+            }
+            2 -> {
+                // Upgrade from version 2 to 3 - Add new settings
+                // Auto send shared content is enabled by default
+                val autoSendSharedValues = ContentValues().apply {
+                    put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_AUTO_SEND_SHARED)
+                    put(SettingsContract.SettingsEntry.COLUMN_VALUE, "true")
+                }
+                db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, autoSendSharedValues)
+                
+                // Close after sending shared message is disabled by default
+                val closeAfterSharedSendValues = ContentValues().apply {
+                    put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND)
+                    put(SettingsContract.SettingsEntry.COLUMN_VALUE, "false")
+                }
+                db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, closeAfterSharedSendValues)
             }
             // Add more cases for future migrations
         }

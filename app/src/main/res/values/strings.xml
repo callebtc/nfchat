@@ -28,4 +28,9 @@
     <string name="settings_category_links">Links</string>
     <string name="setting_auto_open_links">Open links automatically</string>
     <string name="setting_auto_open_links_desc">When enabled, links in messages will open automatically</string>
+    <string name="settings_category_sharing">Sharing</string>
+    <string name="setting_auto_send_shared">Auto-send shared content</string>
+    <string name="setting_auto_send_shared_desc">When enabled, content shared to the app will be sent automatically</string>
+    <string name="setting_close_after_shared_send">Close after sending shared message</string>
+    <string name="setting_close_after_shared_send_desc">When enabled, the app will close after successfully sending a shared message</string>
 </resources>
