@@ -541,10 +541,25 @@ class MainActivity : Activity(), ReaderCallback {
                 )
                 
                 if (useInternalBrowser) {
-                    // Open the URL in an internal WebView
-                    val intent = Intent(this, WebViewActivity::class.java)
-                    intent.putExtra(WebViewActivity.EXTRA_URL, fullUrl)
-                    startActivity(intent)
+                    // Check if there's already a WebViewActivity open
+                    val currentWebView = WebViewActivityManager.getCurrentWebViewActivity()
+                    if (currentWebView != null) {
+                        // Close the existing WebView first
+                        currentWebView.finish()
+                        
+                        // Small delay to ensure the previous activity is properly closed
+                        mainHandler.postDelayed({
+                            // Open the URL in a new WebView
+                            val intent = Intent(this, WebViewActivity::class.java)
+                            intent.putExtra(WebViewActivity.EXTRA_URL, fullUrl)
+                            startActivity(intent)
+                        }, 100)
+                    } else {
+                        // Open the URL in an internal WebView
+                        val intent = Intent(this, WebViewActivity::class.java)
+                        intent.putExtra(WebViewActivity.EXTRA_URL, fullUrl)
+                        startActivity(intent)
+                    }
                 } else {
                     // Open the URL in an external browser
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))

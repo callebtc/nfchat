@@ -72,32 +72,62 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
                 val links = buffer.getSpans(off, off, URLSpan::class.java)
                 if (links.isNotEmpty()) {
                     val url = links[0].url
-                    return handleLinkClick(url)
+                    
+                    // Get the position from the tag of the parent view
+                    val position = (widget.tag as? Int) ?: -1
+                    if (position >= 0 && position < messages.size) {
+                        // Use the full message content for link handling
+                        return handleLinkClick(url, messages[position].content)
+                    }
+                    
+                    return handleLinkClick(url, null)
                 }
             }
             
             return super.onTouchEvent(widget, buffer, event)
         }
         
-        private fun handleLinkClick(url: String): Boolean {
+        private fun handleLinkClick(url: String, fullMessageContent: String?): Boolean {
             // Check if we should use the internal browser
             val useInternalBrowser = dbHelper.getBooleanSetting(
                 SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
                 false
             )
             
-            // Prepend http:// if the URL doesn't have a scheme
-            val fullUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                "http://$url"
+            // If we have the full message content, try to find the complete URL
+            val completeUrl = if (fullMessageContent != null) {
+                findCompleteUrl(url, fullMessageContent)
             } else {
                 url
             }
             
+            // Prepend http:// if the URL doesn't have a scheme
+            val fullUrl = if (!completeUrl.startsWith("http://") && !completeUrl.startsWith("https://")) {
+                "http://$completeUrl"
+            } else {
+                completeUrl
+            }
+            
             if (useInternalBrowser) {
-                // Open the URL in an internal WebView
-                val intent = Intent(context, WebViewActivity::class.java)
-                intent.putExtra(WebViewActivity.EXTRA_URL, fullUrl)
-                context.startActivity(intent)
+                // Check if there's already a WebViewActivity open
+                val currentWebView = WebViewActivityManager.getCurrentWebViewActivity()
+                if (currentWebView != null) {
+                    // Close the existing WebView first
+                    currentWebView.finish()
+                    
+                    // Small delay to ensure the previous activity is properly closed
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        // Open the URL in a new WebView
+                        val intent = Intent(context, WebViewActivity::class.java)
+                        intent.putExtra(WebViewActivity.EXTRA_URL, fullUrl)
+                        context.startActivity(intent)
+                    }, 100)
+                } else {
+                    // Open the URL in a new WebView
+                    val intent = Intent(context, WebViewActivity::class.java)
+                    intent.putExtra(WebViewActivity.EXTRA_URL, fullUrl)
+                    context.startActivity(intent)
+                }
             } else {
                 // Open the URL in an external browser
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
@@ -105,6 +135,24 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
             }
             
             return true
+        }
+        
+        // Helper method to find the complete URL in the full message content
+        private fun findCompleteUrl(partialUrl: String, fullContent: String): String {
+            // Create a pattern that matches URLs
+            val matcher = android.util.Patterns.WEB_URL.matcher(fullContent)
+            
+            // Find all URLs in the full content
+            while (matcher.find()) {
+                val foundUrl = matcher.group()
+                // Check if this URL contains the partial URL
+                if (foundUrl != null && foundUrl.contains(partialUrl)) {
+                    return foundUrl
+                }
+            }
+            
+            // If no matching URL is found, return the original partial URL
+            return partialUrl
         }
     }
 
@@ -258,6 +306,9 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
                                        android.text.util.Linkify.EMAIL_ADDRESSES or
                                        android.text.util.Linkify.PHONE_NUMBERS
             
+            // Store the position in the tag for link handling
+            messageText.tag = adapterPosition
+            
             // Apply truncation if needed
             val spannableText = createTruncatedText(message, adapterPosition)
             messageText.text = spannableText
@@ -285,6 +336,9 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
             messageText.autoLinkMask = android.text.util.Linkify.WEB_URLS or 
                                        android.text.util.Linkify.EMAIL_ADDRESSES or
                                        android.text.util.Linkify.PHONE_NUMBERS
+            
+            // Store the position in the tag for link handling
+            messageText.tag = adapterPosition
             
             // Apply truncation if needed
             val spannableText = createTruncatedText(message, adapterPosition)

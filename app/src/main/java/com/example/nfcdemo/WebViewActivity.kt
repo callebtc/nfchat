@@ -30,6 +30,9 @@ class WebViewActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_web_view)
         
+        // Register this activity with the WebViewActivityManager
+        WebViewActivityManager.setCurrentWebViewActivity(this)
+        
         // Create WebView data directory if needed
         createWebViewDataDirectory()
         
@@ -209,6 +212,9 @@ class WebViewActivity : Activity() {
         
         // Properly destroy the WebView
         destroyWebView()
+        
+        // Unregister this activity from the WebViewActivityManager
+        WebViewActivityManager.clearCurrentWebViewActivity()
         
         super.onDestroy()
     }
