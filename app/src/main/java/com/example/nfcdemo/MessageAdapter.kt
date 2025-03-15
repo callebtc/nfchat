@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
@@ -19,13 +20,26 @@ class MessageAdapter(private val context: Context) :
         private const val VIEW_TYPE_RECEIVED = 2
     }
     
-    data class Message(val content: String, val isSent: Boolean)
+    data class Message(
+        val content: String, 
+        val isSent: Boolean,
+        var isDelivered: Boolean = false
+    )
     
     private val messages = mutableListOf<Message>()
     
-    fun addSentMessage(message: String) {
+    fun addSentMessage(message: String): Int {
+        val position = messages.size
         messages.add(Message(message, true))
-        notifyItemInserted(messages.size - 1)
+        notifyItemInserted(position)
+        return position
+    }
+    
+    fun markMessageAsDelivered(position: Int) {
+        if (position >= 0 && position < messages.size && messages[position].isSent) {
+            messages[position].isDelivered = true
+            notifyItemChanged(position)
+        }
     }
     
     fun addReceivedMessage(message: String) {
@@ -56,7 +70,7 @@ class MessageAdapter(private val context: Context) :
         val message = messages[position]
         
         when (holder) {
-            is SentMessageViewHolder -> holder.bind(message.content)
+            is SentMessageViewHolder -> holder.bind(message)
             is ReceivedMessageViewHolder -> holder.bind(message.content)
         }
     }
@@ -66,12 +80,16 @@ class MessageAdapter(private val context: Context) :
     inner class SentMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val tvMessageContent: TextView = itemView.findViewById(R.id.tvMessageContent)
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btnCopy)
+        private val ivSentCheck: ImageView = itemView.findViewById(R.id.ivSentCheck)
         
-        fun bind(message: String) {
-            tvMessageContent.text = message
+        fun bind(message: Message) {
+            tvMessageContent.text = message.content
+            
+            // Show checkmark if message is delivered
+            ivSentCheck.visibility = if (message.isDelivered) View.VISIBLE else View.GONE
             
             btnCopy.setOnClickListener {
-                copyToClipboard(message)
+                copyToClipboard(message.content)
             }
         }
     }

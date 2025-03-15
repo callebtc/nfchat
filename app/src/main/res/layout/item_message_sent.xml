@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:padding="4dp"
+    android:gravity="end">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/message_sent_background"
+        android:padding="12dp"
+        android:layout_marginStart="48dp"
+        android:layout_marginEnd="8dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvMessageContent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/text_primary_dark"
+                android:textSize="14sp"
+                android:fontFamily="monospace"/>
+
+            <ImageButton
+                android:id="@+id/btnCopy"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:src="@drawable/ic_content_copy"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Copy message"
+                android:layout_marginStart="8dp"
+                android:alpha="0.6"/>
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/ivSentCheck"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:src="@drawable/ic_check"
+            android:layout_gravity="end"
+            android:layout_marginTop="4dp"
+            android:visibility="gone"
+            android:contentDescription="Message sent successfully"/>
+    </LinearLayout>
+</LinearLayout> 

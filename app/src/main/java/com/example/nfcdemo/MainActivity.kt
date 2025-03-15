@@ -102,9 +102,11 @@ class MainActivity : Activity(), ReaderCallback {
             val intent = Intent(this, CardEmulationService::class.java)
             startService(intent)
             
-            // Set up the message and listener
-            CardEmulationService.instance?.messageToShare = etMessage.text.toString()
-            setupDataReceiver()
+            // Set up the message and listener with a delay to ensure service is ready
+            mainHandler.postDelayed({
+                CardEmulationService.instance?.messageToShare = etMessage.text.toString()
+                setupDataReceiver()
+            }, 100) // Short delay to ensure service is initialized
         }
         
         // Set up paste button
@@ -205,6 +207,27 @@ class MainActivity : Activity(), ReaderCallback {
                     runOnUiThread {
                         tvStatus.text = getString(R.string.message_sent)
                         Toast.makeText(this, "Message sent successfully!", Toast.LENGTH_SHORT).show()
+                        
+                        // Mark the last sent message as delivered
+                        val lastPosition = messageAdapter.getItemCount() - 1
+                        messageAdapter.markMessageAsDelivered(lastPosition)
+                        
+                        // Switch to receive mode automatically
+                        isInSendMode = false
+                        isInReceiveMode = true
+                        updateModeIndicators()
+                        tvStatus.text = getString(R.string.status_receive_mode)
+                        
+                        // Start the CardEmulationService for receiving response
+                        disableReaderMode()
+                        val intent = Intent(this, CardEmulationService::class.java)
+                        startService(intent)
+                        
+                        // Set up the message and listener with a delay
+                        mainHandler.postDelayed({
+                            CardEmulationService.instance?.messageToShare = etMessage.text.toString()
+                            setupDataReceiver()
+                        }, 100)
                     }
                 } else {
                     runOnUiThread {
