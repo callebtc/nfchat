@@ -1,14 +1,17 @@
 package com.example.nfcdemo
 
 import android.app.Activity
+import android.app.PendingIntent
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.nfc.NfcAdapter
 import android.nfc.NfcAdapter.ReaderCallback
 import android.nfc.Tag
 import android.nfc.TagLostException
 import android.nfc.tech.IsoDep
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -39,6 +42,11 @@ class MainActivity : Activity(), ReaderCallback {
     
     private var isInSendMode = false
     private var isInReceiveMode = false
+    
+    // For foreground dispatch
+    private lateinit var pendingIntent: PendingIntent
+    private lateinit var intentFilters: Array<IntentFilter>
+    private lateinit var techLists: Array<Array<String>>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,6 +75,9 @@ class MainActivity : Activity(), ReaderCallback {
             btnReceiveMode.isEnabled = false
             return
         }
+        
+        // Set up NFC foreground dispatch system
+        setupForegroundDispatch()
 
         // Set up button click listeners
         btnSendMode.setOnClickListener {
@@ -123,6 +134,79 @@ class MainActivity : Activity(), ReaderCallback {
         }
     }
     
+    private fun setupForegroundDispatch() {
+        // Create a PendingIntent that will be used to deliver NFC intents to our activity
+        val intent = Intent(this, javaClass).apply {
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        
+        pendingIntent = PendingIntent.getActivity(this, 0, intent, flags)
+        
+        // Set up intent filters for NFC discovery
+        val ndef = IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED).apply {
+            try {
+                addDataType("*/*")
+            } catch (e: IntentFilter.MalformedMimeTypeException) {
+                Log.e(TAG, "MalformedMimeTypeException", e)
+            }
+        }
+        
+        val tech = IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED)
+        val tag = IntentFilter(NfcAdapter.ACTION_TAG_DISCOVERED)
+        
+        intentFilters = arrayOf(ndef, tech, tag)
+        
+        // Set up tech lists
+        techLists = arrayOf(arrayOf(IsoDep::class.java.name))
+    }
+    
+    private fun enableForegroundDispatch() {
+        if (nfcAdapter != null) {
+            try {
+                nfcAdapter?.enableForegroundDispatch(this, pendingIntent, intentFilters, techLists)
+                Log.d(TAG, "Foreground dispatch enabled")
+            } catch (e: IllegalStateException) {
+                Log.e(TAG, "Error enabling foreground dispatch", e)
+            }
+        }
+    }
+    
+    private fun disableForegroundDispatch() {
+        if (nfcAdapter != null) {
+            try {
+                nfcAdapter?.disableForegroundDispatch(this)
+                Log.d(TAG, "Foreground dispatch disabled")
+            } catch (e: IllegalStateException) {
+                Log.e(TAG, "Error disabling foreground dispatch", e)
+            }
+        }
+    }
+    
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        Log.d(TAG, "New intent received: ${intent.action}")
+        
+        // Handle the NFC intent if we're not in reader mode
+        if (!isInSendMode && intent.action == NfcAdapter.ACTION_TECH_DISCOVERED ||
+            intent.action == NfcAdapter.ACTION_TAG_DISCOVERED ||
+            intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) {
+            
+            val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
+            tag?.let {
+                // Process the tag if we're not already in reader mode
+                if (!isInSendMode) {
+                    onTagDiscovered(it)
+                }
+            }
+        }
+    }
+    
     private fun setupDataReceiver() {
         // This is a critical function to ensure UI updates happen
         CardEmulationService.instance?.onDataReceivedListener = { receivedData ->
@@ -143,6 +227,10 @@ class MainActivity : Activity(), ReaderCallback {
 
     override fun onResume() {
         super.onResume()
+        
+        // Enable foreground dispatch to intercept all NFC intents
+        enableForegroundDispatch()
+        
         if (isInSendMode) {
             enableReaderMode()
         }
@@ -158,6 +246,7 @@ class MainActivity : Activity(), ReaderCallback {
     override fun onPause() {
         super.onPause()
         disableReaderMode()
+        disableForegroundDispatch()
     }
     
     override fun onDestroy() {
