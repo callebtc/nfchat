@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">NFC Demo</string>
+    <string name="app_name">NFC Chat</string>
     <string name="app_title">NFC Chat</string>
     <string name="title_nfc_transfer">NFC Data Transfer</string>
     <string name="hint_enter_message">Enter message to send:</string>

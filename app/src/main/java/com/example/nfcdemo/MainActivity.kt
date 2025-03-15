@@ -140,6 +140,9 @@ class MainActivity : Activity(), ReaderCallback {
                 setupDataReceiver()
             }, 100)
         }, 500)
+
+        // Handle incoming share intents
+        handleIncomingShareIntent(intent)
     }
     
     private fun setupForegroundDispatch() {
@@ -200,6 +203,12 @@ class MainActivity : Activity(), ReaderCallback {
         super.onNewIntent(intent)
         Log.d(TAG, "New intent received: ${intent.action}")
         
+        // Handle share intents
+        if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
+            handleIncomingShareIntent(intent)
+            return
+        }
+        
         // Handle the NFC intent if we're not in reader mode
         if (!isInSendMode && (intent.action == NfcAdapter.ACTION_TECH_DISCOVERED ||
             intent.action == NfcAdapter.ACTION_TAG_DISCOVERED ||
@@ -209,8 +218,6 @@ class MainActivity : Activity(), ReaderCallback {
             tag?.let {
                 // Process the tag if we're not already in reader mode
                 if (!isInSendMode) {
-                    // We'll still call onTagDiscovered, but we've fixed that method
-                    // to not vibrate for empty messages
                     onTagDiscovered(it)
                 }
             }
@@ -456,6 +463,24 @@ class MainActivity : Activity(), ReaderCallback {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error vibrating: ${e.message}")
+        }
+    }
+
+    private fun handleIncomingShareIntent(intent: Intent?) {
+        // Check if this activity was started from a share intent
+        if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
+            // Extract the shared text
+            val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
+            if (!sharedText.isNullOrEmpty()) {
+                // Set the shared text in the message field
+                etMessage.setText(sharedText)
+                
+                // Show a toast to inform the user
+                Toast.makeText(this, "Text received. Press send to share via NFC.", Toast.LENGTH_LONG).show()
+                
+                // Focus on the send button
+                btnSendMode.requestFocus()
+            }
         }
     }
 }
