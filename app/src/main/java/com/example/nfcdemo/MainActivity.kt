@@ -116,26 +116,18 @@ class MainActivity : Activity(), ReaderCallback {
         // Set up button click listeners
         setupClickListeners()
         
-        // Start in receive mode by default
-        mainHandler.postDelayed({
-            isInReceiveMode = true
-            isInSendMode = false
-            updateModeIndicators()
-            tvStatus.text = getString(R.string.status_receive_mode)
-            
-            // Start the CardEmulationService
-            val intent = Intent(this, CardEmulationService::class.java)
-            startService(intent)
-            
-            // Set up the message and listener
-            mainHandler.postDelayed({
-                CardEmulationService.instance?.messageToShare = etMessage.text.toString()
-                setupDataReceiver()
-            }, 100)
-        }, 500)
-
-        // Handle incoming share intents
-        handleIncomingShareIntent(intent)
+        // Check if we're starting with a share intent
+        val isShareIntent = intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true
+        
+        // Handle incoming share intents first
+        if (isShareIntent) {
+            handleIncomingShareIntent(intent)
+        }
+        
+        // Start in receive mode by default, but only if we're not handling a share intent
+        if (!isShareIntent) {
+            startInReceiveMode()
+        }
     }
     
     private fun setupClickListeners() {
@@ -249,6 +241,12 @@ class MainActivity : Activity(), ReaderCallback {
         
         // Handle share intents
         if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
+            Log.d(TAG, "Share intent received while app is running")
+            
+            // Cancel any pending receive mode initialization
+            mainHandler.removeCallbacksAndMessages(null)
+            
+            // Handle the share intent
             handleIncomingShareIntent(intent)
             return
         }
@@ -549,18 +547,74 @@ class MainActivity : Activity(), ReaderCallback {
     private fun handleIncomingShareIntent(intent: Intent?) {
         // Check if this activity was started from a share intent
         if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
+            Log.d(TAG, "Handling share intent: ${intent.action}, type: ${intent.type}")
+            
             // Extract the shared text
             val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
             if (!sharedText.isNullOrEmpty()) {
+                Log.d(TAG, "Shared text received: ${sharedText.take(50)}${if (sharedText.length > 50) "..." else ""}")
+                
                 // Set the shared text in the message field
                 etMessage.setText(sharedText)
                 
                 // Show a toast to inform the user
-                Toast.makeText(this, "Text received. Press send to share via NFC.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Text received. Preparing to send via NFC.", Toast.LENGTH_LONG).show()
                 
-                // Focus on the send button
-                btnSendMode.requestFocus()
+                // Automatically prepare to send the shared text
+                mainHandler.postDelayed({
+                    // Only proceed if the text is still there (user hasn't cleared it)
+                    if (!etMessage.text.isNullOrEmpty()) {
+                        Log.d(TAG, "Auto-sending shared text")
+                        
+                        // Store the message to send
+                        lastSentMessage = etMessage.text.toString()
+                        
+                        // Add the message to the chat as a sent message
+                        messageAdapter.addSentMessage(lastSentMessage)
+                        scrollToBottom()
+                        
+                        // Clear the input field after sending
+                        etMessage.text.clear()
+                        
+                        // Switch to send mode
+                        isInSendMode = true
+                        isInReceiveMode = false
+                        updateModeIndicators()
+                        tvStatus.text = getString(R.string.status_send_mode)
+                        
+                        // Enable reader mode for sending data
+                        enableReaderMode()
+                    } else {
+                        Log.d(TAG, "Text field is empty, not auto-sending")
+                    }
+                }, 500) // Short delay to ensure UI is ready
+            } else {
+                Log.d(TAG, "Shared text is null or empty")
             }
+        } else {
+            Log.d(TAG, "Not a share intent or wrong type: ${intent?.action}, type: ${intent?.type}")
         }
+    }
+
+    private fun startInReceiveMode() {
+        mainHandler.postDelayed({
+            // Only switch to receive mode if we're not already in send mode
+            if (!isInSendMode) {
+                isInReceiveMode = true
+                isInSendMode = false
+                updateModeIndicators()
+                tvStatus.text = getString(R.string.status_receive_mode)
+                
+                // Start the CardEmulationService
+                val intent = Intent(this, CardEmulationService::class.java)
+                startService(intent)
+                
+                // Set up the message and listener
+                mainHandler.postDelayed({
+                    CardEmulationService.instance?.messageToShare = etMessage.text.toString()
+                    setupDataReceiver()
+                }, 100)
+            }
+        }, 500)
     }
 }
