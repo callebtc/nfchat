@@ -22,15 +22,5 @@
             android:textColor="@color/text_primary_dark"
             android:textSize="14sp"
             android:fontFamily="monospace"/>
-
-        <ImageButton
-            android:id="@+id/btnCopy"
-            android:layout_width="20dp"
-            android:layout_height="20dp"
-            android:src="@drawable/ic_content_copy"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Copy message"
-            android:layout_marginStart="8dp"
-            android:alpha="0.6"/>
     </LinearLayout>
 </LinearLayout> 

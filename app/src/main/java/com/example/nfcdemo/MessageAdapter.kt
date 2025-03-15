@@ -6,7 +6,6 @@ import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -79,7 +78,6 @@ class MessageAdapter(private val context: Context) :
     
     inner class SentMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val tvMessageContent: TextView = itemView.findViewById(R.id.tvMessageContent)
-        private val btnCopy: ImageButton = itemView.findViewById(R.id.btnCopy)
         private val ivSentCheck: ImageView = itemView.findViewById(R.id.ivSentCheck)
         
         fun bind(message: Message) {
@@ -88,21 +86,24 @@ class MessageAdapter(private val context: Context) :
             // Show checkmark if message is delivered
             ivSentCheck.visibility = if (message.isDelivered) View.VISIBLE else View.GONE
             
-            btnCopy.setOnClickListener {
+            // Set long click listener for copying
+            itemView.setOnLongClickListener {
                 copyToClipboard(message.content)
+                true
             }
         }
     }
     
     inner class ReceivedMessageViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val tvMessageContent: TextView = itemView.findViewById(R.id.tvMessageContent)
-        private val btnCopy: ImageButton = itemView.findViewById(R.id.btnCopy)
         
         fun bind(message: String) {
             tvMessageContent.text = message
             
-            btnCopy.setOnClickListener {
+            // Set long click listener for copying
+            itemView.setOnLongClickListener {
                 copyToClipboard(message)
+                true
             }
         }
     }

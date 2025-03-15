@@ -1,16 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Monochromatic Theme Colors -->
-    <color name="primary">#212121</color>
-    <color name="primary_dark">#121212</color>
-    <color name="primary_darker">#000000</color>
-    <color name="accent">#FFFFFF</color>
+    <color name="primary">#2196F3</color>
+    <color name="primary_dark">#1976D2</color>
+    <color name="primary_darker">#0D47A1</color>
+    <color name="accent">#FF4081</color>
     <color name="accent_light">#E0E0E0</color>
     
     <color name="background_dark">#121212</color>
-    <color name="card_background_dark">#1E1E1E</color>
+    <color name="background_dark_lighter">#1E1E1E</color>
+    <color name="card_background_dark">#242424</color>
     <color name="text_primary_dark">#FFFFFF</color>
     <color name="text_secondary_dark">#B3FFFFFF</color> <!-- 70% white -->
+    <color name="text_hint_dark">#80FFFFFF</color>
     
     <!-- Mode Indicator Colors -->
     <color name="send_mode_active">#FFFFFF</color>
@@ -19,4 +21,9 @@
     
     <!-- Border Colors -->
     <color name="border_light">#424242</color>
+    
+    <!-- Button Colors -->
+    <color name="button_enabled">#2196F3</color>
+    <color name="button_disabled">#424242</color>
+    <color name="button_pressed">#1976D2</color>
 </resources>

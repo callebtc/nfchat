@@ -17,7 +17,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.EditText
-import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -35,8 +34,6 @@ class MainActivity : Activity(), ReaderCallback {
     private lateinit var etMessage: EditText
     private lateinit var tvStatus: TextView
     private lateinit var btnSendMode: LinearLayout
-    private lateinit var btnReceiveMode: LinearLayout
-    private lateinit var btnPaste: ImageButton
     private lateinit var rvMessages: RecyclerView
     private lateinit var messageAdapter: MessageAdapter
     
@@ -57,8 +54,6 @@ class MainActivity : Activity(), ReaderCallback {
         etMessage = findViewById(R.id.etMessage)
         tvStatus = findViewById(R.id.tvStatus)
         btnSendMode = findViewById(R.id.btnSendMode)
-        btnReceiveMode = findViewById(R.id.btnReceiveMode)
-        btnPaste = findViewById(R.id.btnPaste)
         rvMessages = findViewById(R.id.rvMessages)
         
         // Set up RecyclerView
@@ -74,7 +69,6 @@ class MainActivity : Activity(), ReaderCallback {
             tvStatus.text = getString(R.string.nfc_not_available)
             Toast.makeText(this, getString(R.string.nfc_not_available), Toast.LENGTH_LONG).show()
             btnSendMode.isEnabled = false
-            btnReceiveMode.isEnabled = false
             return
         }
         
@@ -97,49 +91,30 @@ class MainActivity : Activity(), ReaderCallback {
             lastSentMessage = etMessage.text.toString()
             
             // Add the message to the chat as a sent message
-            messageAdapter.addSentMessage(lastSentMessage)
+            messageAdapter.addSentMessage(etMessage.text.toString())
+            scrollToBottom()
             
             // Enable reader mode for sending data
             enableReaderMode()
         }
-
-        btnReceiveMode.setOnClickListener {
+        
+        // Start in receive mode by default
+        mainHandler.postDelayed({
             isInReceiveMode = true
             isInSendMode = false
             updateModeIndicators()
             tvStatus.text = getString(R.string.status_receive_mode)
             
-            // Disable reader mode and prepare to receive data via HCE
-            disableReaderMode()
-            
             // Start the CardEmulationService
             val intent = Intent(this, CardEmulationService::class.java)
             startService(intent)
             
-            // Set up the message and listener with a delay to ensure service is ready
+            // Set up the message and listener
             mainHandler.postDelayed({
                 CardEmulationService.instance?.messageToShare = etMessage.text.toString()
                 setupDataReceiver()
-            }, 100) // Short delay to ensure service is initialized
-        }
-        
-        // Set up paste button
-        btnPaste.setOnClickListener {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            if (clipboard.hasPrimaryClip() && clipboard.primaryClip?.itemCount ?: 0 > 0) {
-                val item = clipboard.primaryClip?.getItemAt(0)
-                val pasteText = item?.text.toString()
-                etMessage.setText(pasteText)
-                Toast.makeText(this, "Text pasted from clipboard", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "Nothing to paste", Toast.LENGTH_SHORT).show()
-            }
-        }
-        
-        // Start in receive mode by default
-        mainHandler.postDelayed({
-            btnReceiveMode.performClick()
-        }, 100)
+            }, 100)
+        }, 500)
     }
     
     private fun setupForegroundDispatch() {
@@ -228,6 +203,7 @@ class MainActivity : Activity(), ReaderCallback {
                     // Update UI on the main thread
                     messageAdapter.addReceivedMessage(receivedData)
                     tvStatus.text = getString(R.string.message_received)
+                    scrollToBottom()
                 }
             } else {
                 Log.d(TAG, "Duplicate message received, ignoring: $receivedData")
@@ -237,7 +213,6 @@ class MainActivity : Activity(), ReaderCallback {
     
     private fun updateModeIndicators() {
         btnSendMode.isSelected = isInSendMode
-        btnReceiveMode.isSelected = isInReceiveMode
     }
 
     override fun onResume() {
@@ -284,7 +259,6 @@ class MainActivity : Activity(), ReaderCallback {
         nfcAdapter?.disableReaderMode(this)
     }
 
-    // ReaderCallback implementation
     override fun onTagDiscovered(tag: Tag) {
         val isoDep = IsoDep.get(tag) ?: return
         
@@ -334,6 +308,7 @@ class MainActivity : Activity(), ReaderCallback {
                             CardEmulationService.instance?.messageToShare = etMessage.text.toString()
                             setupDataReceiver()
                         }, 100)
+                        scrollToBottom()
                     }
                 } else {
                     runOnUiThread {
@@ -357,6 +332,7 @@ class MainActivity : Activity(), ReaderCallback {
                         runOnUiThread {
                             messageAdapter.addReceivedMessage(receivedMessage)
                             tvStatus.text = getString(R.string.message_received)
+                            scrollToBottom()
                         }
                     } else {
                         Log.d(TAG, "Duplicate message received, ignoring: $receivedMessage")
@@ -416,5 +392,11 @@ class MainActivity : Activity(), ReaderCallback {
     
     private fun ByteArray.toHex(): String {
         return joinToString("") { "%02X".format(it) }
+    }
+
+    private fun scrollToBottom() {
+        rvMessages.post {
+            rvMessages.smoothScrollToPosition(messageAdapter.itemCount - 1)
+        }
     }
 }

@@ -6,15 +6,17 @@
     <string name="btn_send">Send</string>
     <string name="btn_receive">Receive</string>
     <string name="label_received_messages">Received Messages</string>
-    <string name="status_idle">Ready to transfer data</string>
-    <string name="status_send_mode">Send Mode: Tap to another device</string>
-    <string name="status_receive_mode">Receive Mode: Waiting for data</string>
-    <string name="message_sent">Message sent successfully!</string>
+    <string name="status_idle">Ready</string>
+    <string name="status_ready">Ready to send or receive</string>
+    <string name="status_send_mode">Send mode active</string>
+    <string name="status_receive_mode">Receive mode active</string>
+    <string name="message_sent">Message sent successfully</string>
+    <string name="message_received">Message received</string>
     <string name="message_send_failed">Failed to send message</string>
-    <string name="message_received">Message received successfully!</string>
     <string name="no_message_received">No messages received yet</string>
     <string name="nfc_not_available">NFC is not available on this device</string>
-    <string name="enter_message_prompt">Please enter a message to send</string>
+    <string name="enter_message_prompt">Please enter a message first</string>
     <string name="tag_no_message">NFC tag detected but no message found</string>
+    <string name="message_hint">Type a message…</string>
     <string name="message_copied">Message copied to clipboard</string>
 </resources>

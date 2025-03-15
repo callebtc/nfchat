@@ -15,29 +15,13 @@
         android:layout_marginStart="48dp"
         android:layout_marginEnd="8dp">
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/tvMessageContent"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/tvMessageContent"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/text_primary_dark"
-                android:textSize="14sp"
-                android:fontFamily="monospace"/>
-
-            <ImageButton
-                android:id="@+id/btnCopy"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@drawable/ic_content_copy"
-                android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Copy message"
-                android:layout_marginStart="8dp"
-                android:alpha="0.6"/>
-        </LinearLayout>
+            android:textColor="@color/text_primary_dark"
+            android:textSize="14sp"
+            android:fontFamily="monospace"/>
 
         <ImageView
             android:id="@+id/ivSentCheck"
