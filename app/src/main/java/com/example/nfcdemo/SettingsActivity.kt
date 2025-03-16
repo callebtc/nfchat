@@ -8,6 +8,7 @@ import android.util.Log
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageView
+import com.example.nfcdemo.data.AppConstants
 import com.example.nfcdemo.data.MessageDbHelper
 import com.example.nfcdemo.data.SettingsContract
 
@@ -25,9 +26,9 @@ class SettingsActivity : Activity() {
     private lateinit var btnBack: ImageView
     
     // Original values to check if they've changed
-    private var originalMaxChunkSize = "2048"
-    private var originalChunkDelay = "50"
-    private var originalTransferRetryTimeoutMs = "5000"
+    private var originalMaxChunkSize = AppConstants.DefaultSettingsStrings.MAX_CHUNK_SIZE
+    private var originalChunkDelay = AppConstants.DefaultSettingsStrings.CHUNK_DELAY_MS
+    private var originalTransferRetryTimeoutMs = AppConstants.DefaultSettingsStrings.TRANSFER_RETRY_TIMEOUT_MS
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,49 +58,49 @@ class SettingsActivity : Activity() {
         // Load auto open links setting
         val autoOpenLinks = dbHelper.getBooleanSetting(
             SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, 
-            true
+            AppConstants.DefaultSettings.AUTO_OPEN_LINKS
         )
         cbAutoOpenLinks.isChecked = autoOpenLinks
         
         // Load use internal browser setting
         val useInternalBrowser = dbHelper.getBooleanSetting(
             SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
-            false
+            AppConstants.DefaultSettings.USE_INTERNAL_BROWSER
         )
         cbUseInternalBrowser.isChecked = useInternalBrowser
         
         // Load auto send shared setting
         val autoSendShared = dbHelper.getBooleanSetting(
             SettingsContract.SettingsEntry.KEY_AUTO_SEND_SHARED, 
-            true
+            AppConstants.DefaultSettings.AUTO_SEND_SHARED
         )
         cbAutoSendShared.isChecked = autoSendShared
         
         // Load close after shared send setting
         val closeAfterSharedSend = dbHelper.getBooleanSetting(
             SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND, 
-            false
+            AppConstants.DefaultSettings.CLOSE_AFTER_SHARED_SEND
         )
         cbCloseAfterSharedSend.isChecked = closeAfterSharedSend
         
         // Load max chunk size setting
         originalMaxChunkSize = dbHelper.getSetting(
             SettingsContract.SettingsEntry.KEY_MAX_CHUNK_SIZE,
-            "2048"
+            AppConstants.DefaultSettingsStrings.MAX_CHUNK_SIZE
         )
         etMaxChunkSize.setText(originalMaxChunkSize)
         
         // Load chunk delay setting
         originalChunkDelay = dbHelper.getSetting(
             SettingsContract.SettingsEntry.KEY_CHUNK_DELAY,
-            "200"
+            AppConstants.DefaultSettingsStrings.CHUNK_DELAY_MS
         )
         etChunkDelay.setText(originalChunkDelay)
         
         // Load transfer retry timeout setting
         originalTransferRetryTimeoutMs = dbHelper.getSetting(
             SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS,
-            "5000"
+            AppConstants.DefaultSettingsStrings.TRANSFER_RETRY_TIMEOUT_MS
         )
         etTransferRetryTimeoutMs.setText(originalTransferRetryTimeoutMs)
     }
@@ -152,8 +153,8 @@ class SettingsActivity : Activity() {
         // Validate and save max chunk size
         val maxChunkSizeStr = etMaxChunkSize.text.toString()
         if (maxChunkSizeStr.isNotEmpty() && maxChunkSizeStr != originalMaxChunkSize) {
-            val maxChunkSize = maxChunkSizeStr.toIntOrNull() ?: 2048
-            val validMaxChunkSize = maxOf(maxChunkSize, 100) // Minimum 100 characters
+            val maxChunkSize = maxChunkSizeStr.toIntOrNull() ?: AppConstants.DefaultSettings.MAX_CHUNK_SIZE
+            val validMaxChunkSize = maxOf(maxChunkSize, AppConstants.MinimumValues.MIN_CHUNK_SIZE)
             Log.d(TAG, "Saving max chunk size: $validMaxChunkSize")
             dbHelper.setSetting(
                 SettingsContract.SettingsEntry.KEY_MAX_CHUNK_SIZE,
@@ -164,8 +165,8 @@ class SettingsActivity : Activity() {
         // Validate and save chunk delay
         val chunkDelayStr = etChunkDelay.text.toString()
         if (chunkDelayStr.isNotEmpty() && chunkDelayStr != originalChunkDelay) {
-            val chunkDelay = chunkDelayStr.toIntOrNull() ?: 200
-            val validChunkDelay = maxOf(chunkDelay, 50) // Minimum 50ms
+            val chunkDelay = chunkDelayStr.toIntOrNull() ?: AppConstants.DefaultSettings.CHUNK_DELAY_MS.toInt()
+            val validChunkDelay = maxOf(chunkDelay, AppConstants.MinimumValues.MIN_CHUNK_DELAY_MS)
             Log.d(TAG, "Saving chunk delay: $validChunkDelay")
             dbHelper.setSetting(
                 SettingsContract.SettingsEntry.KEY_CHUNK_DELAY,
@@ -176,8 +177,8 @@ class SettingsActivity : Activity() {
         // Validate and save transfer retry timeout
         val transferRetryTimeoutStr = etTransferRetryTimeoutMs.text.toString()
         if (transferRetryTimeoutStr.isNotEmpty() && transferRetryTimeoutStr != originalTransferRetryTimeoutMs) {
-            val transferRetryTimeout = transferRetryTimeoutStr.toIntOrNull() ?: 5000
-            val validTransferRetryTimeout = maxOf(transferRetryTimeout, 0) // Can be 0 to disable
+            val transferRetryTimeout = transferRetryTimeoutStr.toIntOrNull() ?: AppConstants.DefaultSettings.TRANSFER_RETRY_TIMEOUT_MS.toInt()
+            val validTransferRetryTimeout = maxOf(transferRetryTimeout, AppConstants.MinimumValues.MIN_TRANSFER_RETRY_TIMEOUT_MS)
             Log.d(TAG, "Saving transfer retry timeout: $validTransferRetryTimeout")
             dbHelper.setSetting(
                 SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS,

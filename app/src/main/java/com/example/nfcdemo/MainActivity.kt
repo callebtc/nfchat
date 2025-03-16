@@ -30,6 +30,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.nfcdemo.data.AppConstants
 import com.example.nfcdemo.data.MessageDbHelper
 import com.example.nfcdemo.data.SettingsContract
 import java.nio.charset.Charset
@@ -80,7 +81,7 @@ class MainActivity : Activity(), ReaderCallback {
     private var lastReceivedMessageId = "" // Track the ID of the last received message
     
     // Default message length limit before truncation
-    private var messageLengthLimit = 200
+    private var messageLengthLimit = AppConstants.DefaultSettings.MESSAGE_LENGTH_LIMIT
     
     // Track if the app was opened via share intent
     private var openedViaShareIntent = false
@@ -95,12 +96,12 @@ class MainActivity : Activity(), ReaderCallback {
     private var chunksToSend = mutableListOf<String>()
     private var currentChunkIndex = 0
     private var totalChunks = 0
-    private var maxChunkSize = 2048
-    private var chunkDelay = 50L
-    private var transferRetryTimeoutMs = 5000L // in milliseconds
+    private var maxChunkSize = AppConstants.DefaultSettings.MAX_CHUNK_SIZE
+    private var chunkDelay = AppConstants.DefaultSettings.CHUNK_DELAY_MS
+    private var transferRetryTimeoutMs = AppConstants.DefaultSettings.TRANSFER_RETRY_TIMEOUT_MS
     private var acknowledgedChunks = mutableSetOf<Int>()
     private var chunkSendAttempts = mutableMapOf<Int, Int>()
-    private val MAX_SEND_ATTEMPTS = 3
+    private val MAX_SEND_ATTEMPTS = AppConstants.DefaultSettings.MAX_SEND_ATTEMPTS
     
     // Transfer timeout handler
     private var transferTimeoutHandler: Handler? = null
@@ -520,7 +521,7 @@ class MainActivity : Activity(), ReaderCallback {
      */
     private fun openLinksInMessage(message: String) {
         // Check if auto-open links is enabled
-        if (!dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, true)) {
+        if (!dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, AppConstants.DefaultSettings.AUTO_OPEN_LINKS)) {
             return
         }
         
@@ -539,7 +540,7 @@ class MainActivity : Activity(), ReaderCallback {
                 // Check if we should use the internal browser
                 val useInternalBrowser = dbHelper.getBooleanSetting(
                     SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
-                    false
+                    AppConstants.DefaultSettings.USE_INTERNAL_BROWSER
                 )
                 
                 if (useInternalBrowser) {
@@ -1115,7 +1116,7 @@ class MainActivity : Activity(), ReaderCallback {
         if (openedViaShareIntent) {
             val closeAfterSharedSend = dbHelper.getBooleanSetting(
                 SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND, 
-                false
+                AppConstants.DefaultSettings.CLOSE_AFTER_SHARED_SEND
             )
             
             if (closeAfterSharedSend) {
@@ -1198,6 +1199,9 @@ class MainActivity : Activity(), ReaderCallback {
         }
     }
     
+    /**
+     * Vibrate on message sent/received
+     */
     private fun vibrate(duration: Long) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -1336,17 +1340,17 @@ class MainActivity : Activity(), ReaderCallback {
     private fun loadChunkedMessageSettings() {
         maxChunkSize = dbHelper.getSetting(
             SettingsContract.SettingsEntry.KEY_MAX_CHUNK_SIZE,
-            "500"
+            AppConstants.DefaultSettingsStrings.MAX_CHUNK_SIZE
         ).toInt()
         
         chunkDelay = dbHelper.getSetting(
             SettingsContract.SettingsEntry.KEY_CHUNK_DELAY,
-            "200"
+            AppConstants.DefaultSettingsStrings.CHUNK_DELAY_MS
         ).toLong()
         
         transferRetryTimeoutMs = dbHelper.getSetting(
             SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS,
-            "5000"
+            AppConstants.DefaultSettingsStrings.TRANSFER_RETRY_TIMEOUT_MS
         ).toLong()
         
         Log.d(TAG, "Loaded chunked message settings: maxChunkSize=$maxChunkSize, chunkDelay=$chunkDelay, transferRetryTimeoutMs=$transferRetryTimeoutMs")

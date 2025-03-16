@@ -60,49 +60,49 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         // Auto open links is enabled by default
         val autoOpenLinksValues = ContentValues().apply {
             put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS)
-            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "true")
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettings.AUTO_OPEN_LINKS.toString())
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, autoOpenLinksValues)
         
         // Use internal browser is disabled by default
         val useInternalBrowserValues = ContentValues().apply {
             put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER)
-            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "false")
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettings.USE_INTERNAL_BROWSER.toString())
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, useInternalBrowserValues)
         
         // Auto send shared content is enabled by default
         val autoSendSharedValues = ContentValues().apply {
             put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_AUTO_SEND_SHARED)
-            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "true")
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettings.AUTO_SEND_SHARED.toString())
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, autoSendSharedValues)
         
         // Close after sending shared message is disabled by default
         val closeAfterSharedSendValues = ContentValues().apply {
             put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND)
-            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "false")
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettings.CLOSE_AFTER_SHARED_SEND.toString())
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, closeAfterSharedSendValues)
         
-        // Default max chunk size is 2048 characters
+        // Default max chunk size
         val maxChunkSizeValues = ContentValues().apply {
             put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_MAX_CHUNK_SIZE)
-            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "2048")
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettingsStrings.MAX_CHUNK_SIZE)
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, maxChunkSizeValues)
         
-        // Default chunk delay is 200ms
+        // Default chunk delay
         val chunkDelayValues = ContentValues().apply {
             put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_CHUNK_DELAY)
-            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "50")
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettingsStrings.CHUNK_DELAY_MS)
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, chunkDelayValues)
         
-        // Default transfer retry timeout is 5000 milliseconds (5 seconds)
+        // Default transfer retry timeout
         val transferRetryTimeoutValues = ContentValues().apply {
             put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS)
-            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "5000")
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettingsStrings.TRANSFER_RETRY_TIMEOUT_MS)
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, transferRetryTimeoutValues)
     }

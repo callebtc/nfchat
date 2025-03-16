@@ -3,6 +3,7 @@ package com.example.nfcdemo
 import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
 import android.util.Log
+import com.example.nfcdemo.data.AppConstants
 import com.example.nfcdemo.nfc.MessageData
 import com.example.nfcdemo.nfc.NfcProtocol
 import java.nio.charset.Charset

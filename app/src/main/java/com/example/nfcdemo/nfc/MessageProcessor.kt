@@ -7,6 +7,7 @@ import android.util.Log
 import android.util.Patterns
 import com.example.nfcdemo.WebViewActivity
 import com.example.nfcdemo.WebViewActivityManager
+import com.example.nfcdemo.data.AppConstants
 import com.example.nfcdemo.data.MessageDbHelper
 import com.example.nfcdemo.data.SettingsContract
 
@@ -31,7 +32,7 @@ object MessageProcessor {
         val messageContent = messageData.content
         
         // Check if auto-open links is enabled
-        if (dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, true)) {
+        if (dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, AppConstants.DefaultSettings.AUTO_OPEN_LINKS)) {
             openLinksInMessage(context, messageContent, dbHelper)
         }
         
@@ -64,7 +65,7 @@ object MessageProcessor {
                 // Check if we should use the internal browser
                 val useInternalBrowser = dbHelper.getBooleanSetting(
                     SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
-                    false
+                    AppConstants.DefaultSettings.USE_INTERNAL_BROWSER
                 )
                 
                 if (useInternalBrowser) {
