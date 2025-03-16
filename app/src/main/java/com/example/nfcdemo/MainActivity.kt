@@ -54,7 +54,7 @@ enum class AppState {
     SENDING     // Actively sending a message
 }
 
-class MainActivity : Activity(), ReaderCallback {
+class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallback {
 
     private val TAG = "MainActivity"
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -75,22 +75,21 @@ class MainActivity : Activity(), ReaderCallback {
     // Default message length limit before truncation
     private var messageLengthLimit = AppConstants.DefaultSettings.MESSAGE_LENGTH_LIMIT
     
-    // Track if the app was opened via share intent
-    private var openedViaShareIntent = false
-    
     // For foreground dispatch
     private lateinit var pendingIntent: PendingIntent
     private lateinit var intentFilters: Array<IntentFilter>
     private lateinit var techLists: Array<Array<String>>
     
-    // Transfer manager for handling NFC operations
+    // Managers
     private lateinit var transferManager: TransferManager
+    private lateinit var intentManager: IntentManager
 
     private var backgroundNfcEnabled = true
     private val settingsChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action == SettingsActivity.ACTION_BACKGROUND_NFC_SETTING_CHANGED) {
                 backgroundNfcEnabled = intent.getBooleanExtra(SettingsActivity.EXTRA_BACKGROUND_NFC_ENABLED, true)
+                intentManager.setBackgroundNfcEnabled(backgroundNfcEnabled)
                 Log.d(TAG, "Background NFC setting changed: enabled=$backgroundNfcEnabled")
             }
         }
@@ -122,9 +121,12 @@ class MainActivity : Activity(), ReaderCallback {
         // Set the message length limit
         setMessageLengthLimit(messageLengthLimit)
         
-        // Initialize transfer manager
+        // Initialize managers
         transferManager = TransferManager(this)
         setupTransferManagerCallbacks()
+        
+        intentManager = IntentManager(this, transferManager, mainHandler, dbHelper)
+        setupIntentManagerCallbacks()
 
         // Check if NFC is available
         if (transferManager.getNfcAdapter() == null) {
@@ -169,27 +171,27 @@ class MainActivity : Activity(), ReaderCallback {
         
         // Handle incoming share intents first
         if (isShareIntent) {
-            handleIncomingShareIntent(intent)
+            intentManager.handleIncomingShareIntent(intent, appState, etMessage)
         }
         // Handle NFC intents if the app was launched by an NFC discovery
         else if (isNfcIntent) {
             Log.d(TAG, "App launched via NFC intent: ${intent?.action}")
             // Start in receive mode since we were launched by an NFC discovery
-            startInReceiveMode()
+            intentManager.startInReceiveMode(appState, etMessage)
             // Process the NFC intent
-            intent?.let { handleNfcIntent(it) }
+            intent?.let { intentManager.handleNfcIntent(it, appState) }
         }
         // Handle being brought to the foreground from a background message receive
         else if (fromBackgroundReceive) {
             Log.d(TAG, "App brought to foreground from background message receive")
             // Make sure we're in receive mode
-            startInReceiveMode()
+            intentManager.startInReceiveMode(appState, etMessage)
             // Show a toast to inform the user
             Toast.makeText(this, getString(R.string.app_launched_by_nfc), Toast.LENGTH_SHORT).show()
         }
         // Start in receive mode by default, but only if we're not handling a share or NFC intent
         else if (!isShareIntent) {
-            startInReceiveMode()
+            intentManager.startInReceiveMode(appState, etMessage)
         }
         
         // Restore state if available
@@ -202,6 +204,7 @@ class MainActivity : Activity(), ReaderCallback {
             SettingsContract.SettingsEntry.KEY_ENABLE_BACKGROUND_NFC,
             AppConstants.DefaultSettings.ENABLE_BACKGROUND_NFC
         )
+        intentManager.setBackgroundNfcEnabled(backgroundNfcEnabled)
         Log.d(TAG, "Initial background NFC setting: enabled=$backgroundNfcEnabled")
     }
     
@@ -258,7 +261,7 @@ class MainActivity : Activity(), ReaderCallback {
             messageAdapter.markMessageAsDelivered(lastPosition)
             
             // Check if we should close the app after sending a shared message
-            val shouldClose = handlePostSendActions()
+            val shouldClose = intentManager.handlePostSendActions()
             if (!shouldClose) {
                 // Clear the sent message to prevent re-sending
                 lastSentMessage = ""
@@ -282,10 +285,14 @@ class MainActivity : Activity(), ReaderCallback {
     }
     
     /**
-     * Toggle between send and receive modes when the status text is tapped
+     * Set up callbacks for the intent manager
      */
-    private fun toggleMode() {
-        transferManager.toggleMode()
+    private fun setupIntentManagerCallbacks() {
+        intentManager.messageSaveCallback = this
+        
+        intentManager.onOpenedViaShareIntentChanged = { opened ->
+            // Update any UI elements that depend on the openedViaShareIntent state
+        }
     }
     
     /**
@@ -363,92 +370,12 @@ class MainActivity : Activity(), ReaderCallback {
     
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        Log.d(TAG, "New intent received: ${intent.action}")
         
         // Save the new intent to replace the old one
         setIntent(intent)
         
-        // Handle share intents
-        if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
-            Log.d(TAG, "Share intent received while app is running")
-            
-            // Cancel any pending receive mode initialization
-            mainHandler.removeCallbacksAndMessages(null)
-            
-            // If we're in send mode, finish the current operation first
-            if (appState == AppState.SENDING) {
-                // If we're already in send mode, we need to wait until the current operation is complete
-                Toast.makeText(this, getString(R.string.wait_for_current_operation), Toast.LENGTH_SHORT).show()
-                return
-            }
-            
-            // Handle the share intent
-            handleIncomingShareIntent(intent)
-            return
-        }
-        
-        // Handle being brought to the foreground from a background message receive
-        if (intent.getBooleanExtra("from_background_receive", false)) {
-            Log.d(TAG, "App brought to foreground from background message receive")
-            // Make sure we're in receive mode
-            if (appState != AppState.RECEIVING) {
-                transferManager.switchToReceiveMode()
-            }
-            return
-        }
-        
-        // Handle the NFC intent
-        if (intent.action == NfcAdapter.ACTION_TECH_DISCOVERED ||
-            intent.action == NfcAdapter.ACTION_TAG_DISCOVERED ||
-            intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) {
-            
-            handleNfcIntent(intent)
-        }
-    }
-    
-    /**
-     * Handle NFC intents, whether from foreground dispatch or from app launch
-     */
-    private fun handleNfcIntent(intent: Intent) {
-        // Check if the app was launched from background and if background NFC is disabled
-        if (!isAppInForeground && !backgroundNfcEnabled) {
-            Log.d(TAG, "Ignoring NFC intent because background NFC is disabled")
-            return
-        }
-        
-        Log.d(TAG, "Handling NFC intent: ${intent.action}")
-        
-        // Use the new API for getting parcelable extras if available
-        val tag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
-        }
-        
-        tag?.let {
-            // If we're in send mode, we'll process the tag in onTagDiscovered
-            // If we're not in send mode, process the tag directly
-            if (appState != AppState.SENDING) {
-                // Make sure we're in receive mode
-                if (appState != AppState.RECEIVING) {
-                    transferManager.switchToReceiveMode()
-                }
-                
-                // Process the tag
-                transferManager.handleTagDiscovered(it)
-                
-                // Vibrate to indicate NFC detection
-                vibrate(100)
-                
-                // Show a toast to indicate the app was launched by NFC
-                if (intent.action != NfcAdapter.ACTION_TECH_DISCOVERED) {
-                    Toast.makeText(this, getString(R.string.app_launched_by_nfc), Toast.LENGTH_SHORT).show()
-                }
-            }
-        } ?: run {
-            Log.e(TAG, "No tag found in intent")
-        }
+        // Delegate to the intent manager
+        intentManager.handleNewIntent(intent, appState, etMessage)
     }
     
     /**
@@ -475,100 +402,6 @@ class MainActivity : Activity(), ReaderCallback {
         }
     }
 
-    private fun handleIncomingShareIntent(intent: Intent?) {
-        // Check if this activity was started from a share intent
-        if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
-            Log.d(TAG, "Handling share intent: ${intent.action}, type: ${intent.type}")
-            
-            // Mark that we were opened via share intent
-            openedViaShareIntent = true
-            
-            // If we're in receive mode, stop it first
-            if (appState == AppState.RECEIVING) {
-                // Stop the CardEmulationService
-                val serviceIntent = Intent(this, CardEmulationService::class.java)
-                stopService(serviceIntent)
-                
-                // Update state
-                appState = AppState.IDLE
-                updateModeIndicators()
-            }
-            
-            // Extract the shared text
-            val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)
-            if (!sharedText.isNullOrEmpty()) {
-                Log.d(TAG, "Shared text received: ${sharedText.take(50)}${if (sharedText.length > 50) "..." else ""}")
-                
-                // Set the shared text in the message field
-                etMessage.setText(sharedText)
-                
-                // Check if auto-send is enabled
-                val autoSendShared = dbHelper.getBooleanSetting(
-                    SettingsContract.SettingsEntry.KEY_AUTO_SEND_SHARED, 
-                    true
-                )
-                
-                if (autoSendShared) {
-                    // Show a toast to inform the user
-                    Toast.makeText(this, getString(R.string.text_received_auto_send), Toast.LENGTH_LONG).show()
-                    
-                    // Automatically prepare to send the shared text
-                    mainHandler.postDelayed({
-                        // Only proceed if the text is still there (user hasn't cleared it)
-                        if (!etMessage.text.isNullOrEmpty()) {
-                            Log.d(TAG, "Auto-sending shared text")
-                            
-                            // Store the message to send
-                            lastSentMessage = etMessage.text.toString()
-                            transferManager.setLastSentMessage(lastSentMessage)
-                            
-                            // Add the message to the chat as a sent message and save to database
-                            saveAndAddMessage(lastSentMessage, true)
-                            
-                            // Clear the input field after sending
-                            etMessage.text.clear()
-                            
-                            // Switch to send mode
-                            transferManager.switchToSendMode()
-                        } else {
-                            Log.d(TAG, "Text field is empty, not auto-sending")
-                        }
-                    }, 500) // Short delay to ensure UI is ready
-                } else {
-                    // Just show a toast that the text is ready to send
-                    Toast.makeText(this, getString(R.string.text_received_manual_send), Toast.LENGTH_LONG).show()
-                    
-                    // We don't save the message yet - it will be saved when the user presses send
-                    // This avoids duplicate messages in the database
-                    // The message is already in the input field, so the user can edit it before sending
-                }
-            } else {
-                Log.d(TAG, "Shared text is null or empty")
-            }
-        } else {
-            Log.d(TAG, "Not a share intent or wrong type: ${intent?.action}, type: ${intent?.type}")
-        }
-    }
-
-    private fun startInReceiveMode() {
-        // Reset the share intent flag since we're starting normally
-        openedViaShareIntent = false
-        
-        // Use the new switchToReceiveMode method for consistency
-        mainHandler.postDelayed({
-            // Only switch to receive mode if we're not already in send mode
-            if (appState != AppState.SENDING) {
-                transferManager.switchToReceiveMode()
-                
-                // Set up the data receiver
-                transferManager.setupDataReceiver()
-                
-                // Set the current message for the CardEmulationService
-                transferManager.setCardEmulationMessage(etMessage.text.toString())
-            }
-        }, 500)
-    }
-
     /**
      * Helper method to ensure consistent message saving
      * This method ensures that all messages are properly stored in the database
@@ -576,7 +409,7 @@ class MainActivity : Activity(), ReaderCallback {
      * @param isSent Whether the message is sent by the user
      * @return The position of the added message in the adapter
      */
-    private fun saveAndAddMessage(messageText: String, isSent: Boolean): Int {
+    override fun saveAndAddMessage(messageText: String, isSent: Boolean): Int {
         if (messageText.isBlank()) return -1
         
         // Add the message to the adapter (which saves to the database)
@@ -634,7 +467,7 @@ class MainActivity : Activity(), ReaderCallback {
         // Save minimal app state
         outState.putString("appState", appState.name)
         outState.putString("lastReceivedMessageId", lastReceivedMessageId)
-        outState.putBoolean("openedViaShareIntent", openedViaShareIntent)
+        outState.putBoolean("openedViaShareIntent", intentManager.isOpenedViaShareIntent())
         
         Log.d(TAG, "Saved minimal instance state without view hierarchy")
     }
@@ -654,7 +487,7 @@ class MainActivity : Activity(), ReaderCallback {
         }
         
         lastReceivedMessageId = savedInstanceState.getString("lastReceivedMessageId", "")
-        openedViaShareIntent = savedInstanceState.getBoolean("openedViaShareIntent", false)
+        intentManager.setOpenedViaShareIntent(savedInstanceState.getBoolean("openedViaShareIntent", false))
         
         // If we were in the middle of a transfer, reset to receive mode
         if (appState == AppState.SENDING) {
@@ -672,32 +505,8 @@ class MainActivity : Activity(), ReaderCallback {
         Log.d(TAG, "Restored app state")
     }
 
-    // Helper method to determine if the app is in the foreground
-    private val isAppInForeground: Boolean
-        get() {
-            return hasWindowFocus() || (intent?.getBooleanExtra("from_background_receive", false) == true)
-        }
-
-    private fun handlePostSendActions(): Boolean {
-        // Check if we should close the app after sending a shared message
-        if (openedViaShareIntent) {
-            val closeAfterSharedSend = dbHelper.getBooleanSetting(
-                SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND, 
-                AppConstants.DefaultSettings.CLOSE_AFTER_SHARED_SEND
-            )
-            
-            if (closeAfterSharedSend) {
-                // Show a toast to inform the user
-                Toast.makeText(this, getString(R.string.message_sent_closing), Toast.LENGTH_SHORT).show()
-                
-                // Close the app after a short delay
-                mainHandler.postDelayed({
-                    finish()
-                }, 1000)
-                return true
-            }
-        }
-        return false
+    private fun updateModeIndicators() {
+        btnSendMode.isSelected = appState == AppState.SENDING
     }
 
     /**
@@ -710,10 +519,6 @@ class MainActivity : Activity(), ReaderCallback {
                 rvMessages.smoothScrollToPosition(itemCount - 1)
             }
         }
-    }
-
-    private fun updateModeIndicators() {
-        btnSendMode.isSelected = appState == AppState.SENDING
     }
 
     override fun onResume() {
