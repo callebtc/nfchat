@@ -1,6 +1,7 @@
 package com.example.nfcdemo
 
 import android.content.Context
+import android.provider.BaseColumns
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.nfcdemo.data.MessageContract
@@ -95,7 +96,7 @@ class MessageDbHelperTest {
         val cursor = dbHelper.getMessages(10)
         var found = false
         while (cursor.moveToNext()) {
-            val idIndex = cursor.getColumnIndex(MessageContract.MessageEntry._ID)
+            val idIndex = cursor.getColumnIndex(BaseColumns._ID)
             if (cursor.getLong(idIndex) == id) {
                 found = true
                 break

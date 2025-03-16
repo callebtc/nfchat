@@ -2,18 +2,21 @@ package com.example.nfcdemo.data
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.provider.BaseColumns
 import android.util.Log
 import com.example.nfcdemo.MessageAdapter
 import java.util.Date
+import java.util.UUID
 
 /**
  * Database helper for the messages database.
  * Manages database creation and version management.
  */
-class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
+class MessageDbHelper(context: Context, dbName: String? = DATABASE_NAME) : 
+    SQLiteOpenHelper(context, dbName ?: DATABASE_NAME, null, DATABASE_VERSION) {
 
     companion object {
         private const val TAG = "MessageDbHelper"
@@ -395,5 +398,71 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
     fun getAllMessages(): List<MessageAdapter.Message> {
         // Simply call getRecentMessages with a very large limit
         return getRecentMessages(Int.MAX_VALUE)
+    }
+
+    /**
+     * Add a message to the database (for testing)
+     */
+    fun addMessage(content: String, isSent: Boolean, isDelivered: Boolean): Long {
+        val db = writableDatabase
+        
+        val values = ContentValues().apply {
+            put(MessageContract.MessageEntry.COLUMN_CONTENT, content)
+            put(MessageContract.MessageEntry.COLUMN_MESSAGE_ID, UUID.randomUUID().toString())
+            put(MessageContract.MessageEntry.COLUMN_IS_SENT, if (isSent) 1 else 0)
+            put(MessageContract.MessageEntry.COLUMN_IS_DELIVERED, if (isDelivered) 1 else 0)
+            put(MessageContract.MessageEntry.COLUMN_TIMESTAMP, System.currentTimeMillis())
+        }
+        
+        return db.insert(MessageContract.MessageEntry.TABLE_NAME, null, values)
+    }
+
+    /**
+     * Get messages from the database (for testing)
+     */
+    fun getMessages(limit: Int): Cursor {
+        val db = readableDatabase
+        
+        val projection = arrayOf(
+            BaseColumns._ID,
+            MessageContract.MessageEntry.COLUMN_CONTENT,
+            MessageContract.MessageEntry.COLUMN_MESSAGE_ID,
+            MessageContract.MessageEntry.COLUMN_IS_SENT,
+            MessageContract.MessageEntry.COLUMN_IS_DELIVERED,
+            MessageContract.MessageEntry.COLUMN_TIMESTAMP
+        )
+        
+        val sortOrder = "${MessageContract.MessageEntry.COLUMN_TIMESTAMP} ASC"
+        
+        return db.query(
+            MessageContract.MessageEntry.TABLE_NAME,
+            projection,
+            null,
+            null,
+            null,
+            null,
+            sortOrder,
+            limit.toString()
+        )
+    }
+
+    /**
+     * Delete a message from the database (for testing)
+     */
+    fun deleteMessage(messageId: Long): Int {
+        val db = writableDatabase
+        
+        return db.delete(
+            MessageContract.MessageEntry.TABLE_NAME,
+            "${BaseColumns._ID} = ?",
+            arrayOf(messageId.toString())
+        )
+    }
+
+    /**
+     * Save a setting (for testing)
+     */
+    fun saveSetting(key: String, value: String): Long {
+        return setSetting(key, value)
     }
 } 

@@ -251,12 +251,14 @@ class WebViewActivity : Activity() {
     override fun onPause() {
         super.onPause()
         // Pause JavaScript execution and WebView processing when activity is not visible
+        Log.d("WebViewActivity", "onPause")
         webView.onPause()
     }
     
     override fun onResume() {
         super.onResume()
         // Resume JavaScript execution and WebView processing when activity becomes visible
+        Log.d("WebViewActivity", "onResume")
         webView.onResume()
     }
     
@@ -267,14 +269,18 @@ class WebViewActivity : Activity() {
      */
     fun loadNewUrl(url: String) {
         // Make sure we're on the UI thread
+        Log.d("WebViewActivity", "loadNewUrl")
         runOnUiThread {
             // Reset progress bar
             progressBar.progress = 0
             progressBar.visibility = View.VISIBLE
             
+            // hack: if url contains /#, replace with /?
+            val newUrl = url.replace("/#", "/?")
+
             // Load the new URL
-            Log.d("WebViewActivity", "Loading new URL: $url")
-            webView.loadUrl(url)
+            Log.d("WebViewActivity", "Loading new URL: $newUrl")
+            webView.loadUrl(newUrl) 
         }
     }
 } 

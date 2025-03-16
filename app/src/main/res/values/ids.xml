@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Settings Activity IDs -->
+    <item name="switchAutoOpenLinks" type="id" />
+    <item name="switchUseInternalBrowser" type="id" />
+    <item name="switchAutoSendShared" type="id" />
+    <item name="switchCloseAfterSharedSend" type="id" />
+    <item name="btnClearMessages" type="id" />
+    <item name="btnAdvancedSettings" type="id" />
+    <item name="layoutAdvancedSettings" type="id" />
+    <item name="etTransferTimeout" type="id" />
+    <item name="etMaxChunkSize" type="id" />
+    <item name="etChunkDelay" type="id" />
+    <item name="etTransferRetryTimeoutMs" type="id" />
+    
+    <!-- WebView Activity IDs -->
+    <item name="btnRefresh" type="id" />
+    <item name="btnShare" type="id" />
+    <item name="btnOpenInBrowser" type="id" />
+</resources> 
