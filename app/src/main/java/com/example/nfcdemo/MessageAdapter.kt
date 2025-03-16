@@ -27,6 +27,7 @@ import com.example.nfcdemo.data.SettingsContract
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 class MessageAdapter(private val context: Context) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
@@ -44,7 +45,8 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         var isDelivered: Boolean = false,
         val timestamp: Date = Date(),
         var id: Long = -1, // Database ID
-        var isExpanded: Boolean = false // Track expanded state
+        var isExpanded: Boolean = false, // Track expanded state
+        val messageId: String = UUID.randomUUID().toString() // Unique message ID for duplicate detection
     )
 
     private val messages = mutableListOf<Message>()

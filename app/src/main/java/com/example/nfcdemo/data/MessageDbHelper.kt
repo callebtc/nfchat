@@ -19,7 +19,7 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         private const val TAG = "MessageDbHelper"
         
         // If you change the database schema, you must increment the database version
-        const val DATABASE_VERSION = 4
+        const val DATABASE_VERSION = 5
         const val DATABASE_NAME = "Messages.db"
 
         // SQL statement to create the messages table - not using const because it uses string interpolation
@@ -27,6 +27,7 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             "CREATE TABLE ${MessageContract.MessageEntry.TABLE_NAME} (" +
             "${BaseColumns._ID} INTEGER PRIMARY KEY, " +
             "${MessageContract.MessageEntry.COLUMN_CONTENT} TEXT NOT NULL, " +
+            "${MessageContract.MessageEntry.COLUMN_MESSAGE_ID} TEXT NOT NULL, " +
             "${MessageContract.MessageEntry.COLUMN_IS_SENT} INTEGER NOT NULL, " +
             "${MessageContract.MessageEntry.COLUMN_IS_DELIVERED} INTEGER NOT NULL, " +
             "${MessageContract.MessageEntry.COLUMN_TIMESTAMP} INTEGER NOT NULL)"
@@ -148,6 +149,18 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 }
                 db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, useInternalBrowserValues)
             }
+            4 -> {
+                // Upgrade from version 4 to 5 - Add message ID column
+                val messageIdValues = ContentValues().apply {
+                    put(MessageContract.MessageEntry.COLUMN_MESSAGE_ID, "0")
+                }
+                db.update(
+                    MessageContract.MessageEntry.TABLE_NAME,
+                    messageIdValues,
+                    null,
+                    null
+                )
+            }
         }
     }
 
@@ -163,6 +176,7 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         
         val values = ContentValues().apply {
             put(MessageContract.MessageEntry.COLUMN_CONTENT, message.content)
+            put(MessageContract.MessageEntry.COLUMN_MESSAGE_ID, message.messageId)
             put(MessageContract.MessageEntry.COLUMN_IS_SENT, if (message.isSent) 1 else 0)
             put(MessageContract.MessageEntry.COLUMN_IS_DELIVERED, if (message.isDelivered) 1 else 0)
             put(MessageContract.MessageEntry.COLUMN_TIMESTAMP, message.timestamp.time)
@@ -198,6 +212,7 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         val projection = arrayOf(
             BaseColumns._ID,
             MessageContract.MessageEntry.COLUMN_CONTENT,
+            MessageContract.MessageEntry.COLUMN_MESSAGE_ID,
             MessageContract.MessageEntry.COLUMN_IS_SENT,
             MessageContract.MessageEntry.COLUMN_IS_DELIVERED,
             MessageContract.MessageEntry.COLUMN_TIMESTAMP
@@ -221,6 +236,7 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         with(cursor) {
             while (moveToNext()) {
                 val content = getString(getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_CONTENT))
+                val messageId = getString(getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_MESSAGE_ID))
                 val isSent = getInt(getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_IS_SENT)) == 1
                 val isDelivered = getInt(getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_IS_DELIVERED)) == 1
                 val timestamp = getLong(getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_TIMESTAMP))
@@ -228,6 +244,7 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 messages.add(
                     MessageAdapter.Message(
                         content = content,
+                        messageId = messageId,
                         isSent = isSent,
                         isDelivered = isDelivered,
                         timestamp = Date(timestamp)

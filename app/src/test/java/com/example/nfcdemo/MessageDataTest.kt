@@ -1,5 +1,6 @@
 package com.example.nfcdemo
 
+import com.example.nfcdemo.nfc.MessageData
 import org.json.JSONException
 import org.json.JSONObject
 import org.junit.Assert.*
