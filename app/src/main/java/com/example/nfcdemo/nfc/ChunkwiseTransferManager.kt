@@ -48,6 +48,9 @@ class ChunkwiseTransferManager(private val context: Context) {
     var transferRetryTimeoutRunnable: Runnable? = null
     var isRetryingTransfer = false
     
+    // Main thread handler for UI updates
+    private val mainHandler = Handler(Looper.getMainLooper())
+    
     // Callbacks
     var onTransferStatusChanged: ((String) -> Unit)? = null
     var onTransferCompleted: (() -> Unit)? = null
@@ -121,7 +124,9 @@ class ChunkwiseTransferManager(private val context: Context) {
                     }
                     
                     // Start retry timeout and wait for reconnection
-                    onTransferStatusChanged?.invoke(context.getString(R.string.failed_to_initialize_transfer))
+                    mainHandler.post {
+                        onTransferStatusChanged?.invoke(context.getString(R.string.failed_to_initialize_transfer))
+                    }
                     startTransferRetryTimeout()
                     return false
                 }
@@ -146,41 +151,29 @@ class ChunkwiseTransferManager(private val context: Context) {
                 
                 // If retry timeout is disabled (0), immediately handle error
                 if (transferRetryTimeoutMs <= 0) {
-                    handleChunkedTransferError(context.getString(R.string.chunked_transfer_incomplete))
+                    handleChunkedTransferError("Failed to complete chunked transfer")
                     return false
                 }
                 
                 // Start retry timeout and wait for reconnection
-                onTransferStatusChanged?.invoke(context.getString(R.string.transfer_incomplete))
+                mainHandler.post {
+                    onTransferStatusChanged?.invoke(context.getString(R.string.failed_to_complete_transfer))
+                }
                 startTransferRetryTimeout()
                 return false
             }
         } catch (e: IOException) {
             // Handle communication errors with retry logic
-            handleTagCommunicationError(e)
+            handleChunkedTransferError("Error during chunked sending: ${e.message}")
             return false
         } catch (e: TagLostException) {
             // Handle tag lost errors with retry logic
-            handleTagLostError(e)
+            handleChunkedTransferError("Tag lost during chunked sending: ${e.message}")
             return false
         } catch (e: Exception) {
-            // For other exceptions, log and reset if not in retry mode
-            Log.e(TAG, "Error during chunked sending: ${e.message}")
-            
-            // If we're already in retry mode, just return and wait for retry timeout
-            if (isRetryingTransfer) {
-                return false
-            }
-            
-            // If retry timeout is disabled (0), immediately handle error
-            if (transferRetryTimeoutMs <= 0) {
-                handleChunkedTransferError(e.message ?: "Unknown error")
-                return false
-            }
-            
-            // Start retry timeout and wait for reconnection
-            onTransferStatusChanged?.invoke(context.getString(R.string.error_during_transfer))
-            startTransferRetryTimeout()
+            // For other exceptions, log and reset
+            Log.e(TAG, "Unexpected error during chunked sending: ${e.message}")
+            handleChunkedTransferError("Error during chunked sending: ${e.message}")
             return false
         }
     }
@@ -204,7 +197,9 @@ class ChunkwiseTransferManager(private val context: Context) {
         }
         
         // Update UI to show we're starting chunked transfer
-        onTransferStatusChanged?.invoke(context.getString(R.string.sending_chunk, 0, totalChunks))
+        mainHandler.post {
+            onTransferStatusChanged?.invoke(context.getString(R.string.sending_chunk, 0, totalChunks))
+        }
         
         // Start the transfer timeout
         startTransferTimeout()
@@ -231,7 +226,9 @@ class ChunkwiseTransferManager(private val context: Context) {
             }
             
             // Update UI with current progress
-            onTransferStatusChanged?.invoke(context.getString(R.string.sending_chunk, acknowledgedChunks.size + 1, totalChunks))
+            mainHandler.post {
+                onTransferStatusChanged?.invoke(context.getString(R.string.sending_chunk, acknowledgedChunks.size + 1, totalChunks))
+            }
             
             // Send the chunk
             val chunkData = chunksToSend[chunkToSend]
@@ -273,41 +270,49 @@ class ChunkwiseTransferManager(private val context: Context) {
         val completeCommand = NfcProtocol.createChunkCompleteCommand()
         val completeResult = isoDep.transceive(completeCommand)
         
-        if (NfcProtocol.isSuccess(completeResult)) {
-            Log.d(TAG, "Chunked transfer completed successfully")
-            
-            onTransferStatusChanged?.invoke(context.getString(R.string.chunked_transfer_complete))
-            onTransferCompleted?.invoke()
-            
-            // Reset chunked send mode
-            resetChunkedSendMode()
-            
-            return true
-        } else {
+        if (!NfcProtocol.isSuccess(completeResult)) {
             Log.e(TAG, "Failed to complete chunked transfer")
             chunkedTransferState = ChunkedTransferState.ERROR
-            handleChunkedTransferError(context.getString(R.string.chunked_transfer_failed_message))
             return false
+        }
+        
+        // Update state to idle
+        chunkedTransferState = ChunkedTransferState.IDLE
+        
+        // Notify completion
+        mainHandler.post {
+            onTransferCompleted?.invoke()
+        }
+        
+        return true
+    }
+    
+    /**
+     * Handle chunked transfer error
+     */
+    private fun handleChunkedTransferError(errorMessage: String) {
+        Log.e(TAG, "Chunked transfer error: $errorMessage")
+        
+        // Update state to error
+        chunkedTransferState = ChunkedTransferState.ERROR
+        
+        // Cancel any active transfer timeout
+        cancelTransferTimeout()
+        
+        // Reset chunked send mode
+        resetChunkedSendMode()
+        
+        // Reset retry flag
+        isRetryingTransfer = false
+        
+        // Notify error
+        mainHandler.post {
+            onTransferError?.invoke(errorMessage)
         }
     }
     
     /**
-     * Handle errors during chunked transfer
-     */
-    private fun handleChunkedTransferError(errorMessage: String) {
-        Log.e(TAG, "Chunked transfer error: $errorMessage")
-        chunkedTransferState = ChunkedTransferState.ERROR
-        
-        onTransferStatusChanged?.invoke(context.getString(R.string.chunked_transfer_failed))
-        Toast.makeText(context, context.getString(R.string.chunked_transfer_error, errorMessage), Toast.LENGTH_LONG).show()
-        
-        resetChunkedSendMode()
-        onTransferError?.invoke(errorMessage)
-    }
-    
-    /**
-     * Find the next chunk that needs to be sent
-     * @return The index of the next chunk to send, or -1 if all chunks have been acknowledged
+     * Find the next chunk to send
      */
     private fun findNextChunkToSend(): Int {
         // First, check if there are any chunks that haven't been attempted yet
@@ -366,87 +371,36 @@ class ChunkwiseTransferManager(private val context: Context) {
         transferTimeoutRunnable = Runnable {
             Log.e(TAG, "Transfer timeout occurred")
             
-            if (chunkedTransferState != ChunkedTransferState.IDLE) {
-                // Handle timeout on sender side
-                onTransferStatusChanged?.invoke(context.getString(R.string.chunked_transfer_failed))
-                Toast.makeText(context, context.getString(R.string.chunked_transfer_timeout), Toast.LENGTH_LONG).show()
-                resetChunkedSendMode()
+            // Reset chunked send mode
+            resetChunkedSendMode()
+            
+            // Notify error
+            mainHandler.post {
                 onTransferError?.invoke(context.getString(R.string.chunked_transfer_timeout))
             }
         }
         
         // Schedule the timeout
-        transferTimeoutHandler?.postDelayed(transferTimeoutRunnable!!, transferRetryTimeoutMs)
+        transferTimeoutHandler?.postDelayed(transferTimeoutRunnable!!, 30000) // 30 seconds timeout
     }
     
     /**
      * Cancel any active transfer timeout
      */
     fun cancelTransferTimeout() {
-        transferTimeoutRunnable?.let {
-            transferTimeoutHandler?.removeCallbacks(it)
-            transferTimeoutRunnable = null
-        }
+        transferTimeoutHandler?.removeCallbacks(transferTimeoutRunnable ?: return)
+        transferTimeoutRunnable = null
     }
     
     /**
-     * Handle communication errors with the NFC tag
-     */
-    private fun handleTagCommunicationError(e: IOException) {
-        Log.e(TAG, "Error communicating with tag: ${e.message}")
-        
-        // If retry timeout is disabled (0), immediately reset
-        if (transferRetryTimeoutMs <= 0) {
-            resetAndNotifyError("Communication error: ${e.message}")
-            return
-        }
-        
-        // If we're already retrying, don't start another retry timer
-        if (isRetryingTransfer) {
-            return
-        }
-        
-        // Update UI to show we're waiting for reconnection
-        onTransferStatusChanged?.invoke(context.getString(R.string.connection_lost))
-        
-        // Start retry timeout
-        startTransferRetryTimeout()
-    }
-    
-    /**
-     * Handle tag lost errors
-     */
-    private fun handleTagLostError(e: TagLostException) {
-        Log.e(TAG, "Tag lost: ${e.message}")
-        
-        // If retry timeout is disabled (0), immediately reset
-        if (transferRetryTimeoutMs <= 0) {
-            resetAndNotifyError(context.getString(R.string.tag_connection_lost))
-            return
-        }
-        
-        // If we're already retrying, don't start another retry timer
-        if (isRetryingTransfer) {
-            return
-        }
-        
-        // Update UI to show we're waiting for reconnection
-        onTransferStatusChanged?.invoke(context.getString(R.string.tag_connection_lost_waiting))
-        
-        // Start retry timeout
-        startTransferRetryTimeout()
-    }
-    
-    /**
-     * Start a timeout for transfer retry
-     * After this timeout, we'll give up and switch to receive mode
+     * Start a retry timeout for chunked transfers
      */
     fun startTransferRetryTimeout() {
-        // Mark that we're in retry mode
-        isRetryingTransfer = true
-        
-        // Cancel any existing retry timeout
+        // Cancel any existing timeout first
         cancelTransferRetryTimeout()
+        
+        // Set retry flag
+        isRetryingTransfer = true
         
         // Create a new timeout handler if needed
         if (transferRetryTimeoutHandler == null) {
@@ -457,55 +411,36 @@ class ChunkwiseTransferManager(private val context: Context) {
         transferRetryTimeoutRunnable = Runnable {
             Log.e(TAG, "Transfer retry timeout occurred")
             
+            // Reset chunked send mode
+            resetChunkedSendMode()
+            
             // Reset retry flag
             isRetryingTransfer = false
             
-            // Reset and notify error
-            resetAndNotifyError(context.getString(R.string.connection_not_restored))
+            // Notify error
+            mainHandler.post {
+                onTransferError?.invoke(context.getString(R.string.transfer_retry_timeout))
+                
+                // Notify retry timeout
+                onTransferRetryTimeout?.invoke()
+            }
         }
-        
-        // Notify that we're starting retry
-        onTransferRetryStarted?.invoke()
         
         // Schedule the timeout
         transferRetryTimeoutHandler?.postDelayed(transferRetryTimeoutRunnable!!, transferRetryTimeoutMs)
+        
+        // Notify retry started
+        mainHandler.post {
+            onTransferRetryStarted?.invoke()
+        }
     }
     
     /**
-     * Cancel any active transfer retry timeout
+     * Cancel any active retry timeout
      */
     fun cancelTransferRetryTimeout() {
-        transferRetryTimeoutRunnable?.let {
-            transferRetryTimeoutHandler?.removeCallbacks(it)
-            transferRetryTimeoutRunnable = null
-        }
-    }
-    
-    /**
-     * Reset all transfer state and notify error
-     */
-    private fun resetAndNotifyError(errorMessage: String) {
-        // Cancel any active timeouts
-        cancelTransferTimeout()
-        cancelTransferRetryTimeout()
-        
-        // Update status
-        onTransferStatusChanged?.invoke(errorMessage)
-        
-        // If we were in chunked send mode, show a more specific error message
-        if (chunkedTransferState == ChunkedTransferState.SENDING_CHUNKS) {
-            Toast.makeText(context, context.getString(R.string.chunked_transfer_error, "Connection lost"), Toast.LENGTH_LONG).show()
-            resetChunkedSendMode()
-        }
-        
-        // Reset retry flag
-        isRetryingTransfer = false
-        
-        // Notify error
-        onTransferError?.invoke(errorMessage)
-        
-        // Notify retry timeout
-        onTransferRetryTimeout?.invoke()
+        transferRetryTimeoutHandler?.removeCallbacks(transferRetryTimeoutRunnable ?: return)
+        transferRetryTimeoutRunnable = null
     }
     
     /**
@@ -536,8 +471,10 @@ class ChunkwiseTransferManager(private val context: Context) {
                 cancelTransferRetryTimeout()
                 isRetryingTransfer = false
                 
-                onTransferStatusChanged?.invoke(context.getString(R.string.message_sent))
-                onTransferCompleted?.invoke()
+                mainHandler.post {
+                    onTransferStatusChanged?.invoke(context.getString(R.string.message_sent))
+                    onTransferCompleted?.invoke()
+                }
                 
                 return true
             } else {
@@ -549,13 +486,17 @@ class ChunkwiseTransferManager(private val context: Context) {
                 
                 // If retry timeout is disabled (0), immediately show failure
                 if (transferRetryTimeoutMs <= 0) {
-                    onTransferStatusChanged?.invoke(context.getString(R.string.message_send_failed))
-                    onTransferError?.invoke(context.getString(R.string.message_send_failed))
+                    mainHandler.post {
+                        onTransferStatusChanged?.invoke(context.getString(R.string.message_send_failed))
+                        onTransferError?.invoke(context.getString(R.string.message_send_failed))
+                    }
                     return false
                 }
                 
                 // Start retry timeout and wait for reconnection
-                onTransferStatusChanged?.invoke(context.getString(R.string.send_failed_waiting))
+                mainHandler.post {
+                    onTransferStatusChanged?.invoke(context.getString(R.string.send_failed_waiting))
+                }
                 startTransferRetryTimeout()
                 return false
             }
@@ -572,6 +513,69 @@ class ChunkwiseTransferManager(private val context: Context) {
             Log.e(TAG, "Unexpected error sending message: ${e.message}")
             resetAndNotifyError("Error: ${e.message}")
             return false
+        }
+    }
+    
+    /**
+     * Handle communication errors with the NFC tag
+     */
+    private fun handleTagCommunicationError(e: IOException) {
+        Log.e(TAG, "Error communicating with tag: ${e.message}")
+        
+        if (transferRetryTimeoutMs <= 0) {
+            resetAndNotifyError("Communication error: ${e.message}")
+            return
+        }
+        
+        if (isRetryingTransfer) {
+            return
+        }
+        
+        mainHandler.post {
+            onTransferStatusChanged?.invoke("Connection lost. Waiting for reconnection...")
+        }
+        
+        startTransferRetryTimeout()
+    }
+    
+    /**
+     * Handle tag lost errors
+     */
+    private fun handleTagLostError(e: TagLostException) {
+        Log.e(TAG, "Tag lost: ${e.message}")
+        
+        if (transferRetryTimeoutMs <= 0) {
+            resetAndNotifyError("Tag connection lost. Try again.")
+            return
+        }
+        
+        if (isRetryingTransfer) {
+            return
+        }
+        
+        mainHandler.post {
+            onTransferStatusChanged?.invoke("Tag connection lost. Waiting for reconnection...")
+        }
+        
+        startTransferRetryTimeout()
+    }
+    
+    /**
+     * Reset all transfer state and notify error
+     */
+    private fun resetAndNotifyError(errorMessage: String) {
+        // Reset chunked send mode
+        resetChunkedSendMode()
+        
+        // Reset retry flag
+        isRetryingTransfer = false
+        
+        // Notify error
+        mainHandler.post {
+            onTransferError?.invoke(errorMessage)
+            
+            // Notify retry timeout
+            onTransferRetryTimeout?.invoke()
         }
     }
     
