@@ -57,10 +57,8 @@
     <string name="setting_max_chunk_size_desc">Maximum number of characters per chunk for long messages</string>
     <string name="setting_chunk_delay">Chunk delay (ms)</string>
     <string name="setting_chunk_delay_desc">Delay between sending chunks in milliseconds</string>
-    <string name="setting_transfer_timeout">Transfer timeout (seconds)</string>
-    <string name="setting_transfer_timeout_desc">Time to wait before aborting a stalled transfer</string>
-    <string name="setting_transfer_retry_timeout">Transfer retry timeout (ms)</string>
-    <string name="setting_transfer_retry_timeout_desc">Time to keep retrying after connection loss (0 to disable)</string>
+    <string name="setting_transfer_retry_timeout">Transfer timeout (ms)</string>
+    <string name="setting_transfer_retry_timeout_desc">Time to wait for transfer completion and retry after connection loss (0 to disable)</string>
     <string name="web_view_back">Back</string>
     <string name="web_view_forward">Forward</string>
     <string name="web_view_close">Close</string>

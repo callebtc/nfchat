@@ -21,14 +21,12 @@ class SettingsActivity : Activity() {
     private lateinit var cbCloseAfterSharedSend: CheckBox
     private lateinit var etMaxChunkSize: EditText
     private lateinit var etChunkDelay: EditText
-    private lateinit var etTransferTimeout: EditText
     private lateinit var etTransferRetryTimeoutMs: EditText
     private lateinit var btnBack: ImageView
     
     // Original values to check if they've changed
-    private var originalMaxChunkSize = "500"
-    private var originalChunkDelay = "200"
-    private var originalTransferTimeout = "2"
+    private var originalMaxChunkSize = "2048"
+    private var originalChunkDelay = "50"
     private var originalTransferRetryTimeoutMs = "5000"
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,7 +43,6 @@ class SettingsActivity : Activity() {
         cbCloseAfterSharedSend = findViewById(R.id.cbCloseAfterSharedSend)
         etMaxChunkSize = findViewById(R.id.etMaxChunkSize)
         etChunkDelay = findViewById(R.id.etChunkDelay)
-        etTransferTimeout = findViewById(R.id.etTransferTimeout)
         etTransferRetryTimeoutMs = findViewById(R.id.etTransferRetryTimeoutMs)
         btnBack = findViewById(R.id.btnBack)
         
@@ -88,7 +85,7 @@ class SettingsActivity : Activity() {
         // Load max chunk size setting
         originalMaxChunkSize = dbHelper.getSetting(
             SettingsContract.SettingsEntry.KEY_MAX_CHUNK_SIZE,
-            "500"
+            "2048"
         )
         etMaxChunkSize.setText(originalMaxChunkSize)
         
@@ -98,13 +95,6 @@ class SettingsActivity : Activity() {
             "200"
         )
         etChunkDelay.setText(originalChunkDelay)
-        
-        // Load transfer timeout setting
-        originalTransferTimeout = dbHelper.getSetting(
-            SettingsContract.SettingsEntry.KEY_TRANSFER_TIMEOUT,
-            "2"
-        )
-        etTransferTimeout.setText(originalTransferTimeout)
         
         // Load transfer retry timeout setting
         originalTransferRetryTimeoutMs = dbHelper.getSetting(
@@ -162,7 +152,7 @@ class SettingsActivity : Activity() {
         // Validate and save max chunk size
         val maxChunkSizeStr = etMaxChunkSize.text.toString()
         if (maxChunkSizeStr.isNotEmpty() && maxChunkSizeStr != originalMaxChunkSize) {
-            val maxChunkSize = maxChunkSizeStr.toIntOrNull() ?: 500
+            val maxChunkSize = maxChunkSizeStr.toIntOrNull() ?: 2048
             val validMaxChunkSize = maxOf(maxChunkSize, 100) // Minimum 100 characters
             Log.d(TAG, "Saving max chunk size: $validMaxChunkSize")
             dbHelper.setSetting(
@@ -180,18 +170,6 @@ class SettingsActivity : Activity() {
             dbHelper.setSetting(
                 SettingsContract.SettingsEntry.KEY_CHUNK_DELAY,
                 validChunkDelay.toString()
-            )
-        }
-        
-        // Validate and save transfer timeout
-        val transferTimeoutStr = etTransferTimeout.text.toString()
-        if (transferTimeoutStr.isNotEmpty() && transferTimeoutStr != originalTransferTimeout) {
-            val transferTimeout = transferTimeoutStr.toIntOrNull() ?: 2
-            val validTransferTimeout = maxOf(transferTimeout, 1) // Minimum 1 second
-            Log.d(TAG, "Saving transfer timeout: $validTransferTimeout")
-            dbHelper.setSetting(
-                SettingsContract.SettingsEntry.KEY_TRANSFER_TIMEOUT,
-                validTransferTimeout.toString()
             )
         }
         

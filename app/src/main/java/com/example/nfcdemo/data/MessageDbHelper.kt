@@ -85,26 +85,19 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, closeAfterSharedSendValues)
         
-        // Default max chunk size is 500 characters
+        // Default max chunk size is 2048 characters
         val maxChunkSizeValues = ContentValues().apply {
             put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_MAX_CHUNK_SIZE)
-            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "500")
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "2048")
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, maxChunkSizeValues)
         
         // Default chunk delay is 200ms
         val chunkDelayValues = ContentValues().apply {
             put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_CHUNK_DELAY)
-            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "200")
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "50")
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, chunkDelayValues)
-        
-        // Default transfer timeout is 2 seconds
-        val transferTimeoutValues = ContentValues().apply {
-            put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_TRANSFER_TIMEOUT)
-            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "2")
-        }
-        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, transferTimeoutValues)
         
         // Default transfer retry timeout is 5000 milliseconds (5 seconds)
         val transferRetryTimeoutValues = ContentValues().apply {

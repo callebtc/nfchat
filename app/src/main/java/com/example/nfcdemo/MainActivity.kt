@@ -95,9 +95,8 @@ class MainActivity : Activity(), ReaderCallback {
     private var chunksToSend = mutableListOf<String>()
     private var currentChunkIndex = 0
     private var totalChunks = 0
-    private var maxChunkSize = 500
-    private var chunkDelay = 200L
-    private var transferTimeout = 2 // in seconds
+    private var maxChunkSize = 2048
+    private var chunkDelay = 50L
     private var transferRetryTimeoutMs = 5000L // in milliseconds
     private var acknowledgedChunks = mutableSetOf<Int>()
     private var chunkSendAttempts = mutableMapOf<Int, Int>()
@@ -503,7 +502,7 @@ class MainActivity : Activity(), ReaderCallback {
         }
         
         // Schedule the timeout
-        transferTimeoutHandler?.postDelayed(transferTimeoutRunnable!!, transferTimeout * 1000L)
+        transferTimeoutHandler?.postDelayed(transferTimeoutRunnable!!, transferRetryTimeoutMs)
     }
     
     /**
@@ -1345,17 +1344,12 @@ class MainActivity : Activity(), ReaderCallback {
             "200"
         ).toLong()
         
-        transferTimeout = dbHelper.getSetting(
-            SettingsContract.SettingsEntry.KEY_TRANSFER_TIMEOUT,
-            "2"
-        ).toInt()
-        
         transferRetryTimeoutMs = dbHelper.getSetting(
             SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS,
             "5000"
         ).toLong()
         
-        Log.d(TAG, "Loaded chunked message settings: maxChunkSize=$maxChunkSize, chunkDelay=$chunkDelay, transferTimeout=$transferTimeout, transferRetryTimeoutMs=$transferRetryTimeoutMs")
+        Log.d(TAG, "Loaded chunked message settings: maxChunkSize=$maxChunkSize, chunkDelay=$chunkDelay, transferRetryTimeoutMs=$transferRetryTimeoutMs")
     }
 
     /**

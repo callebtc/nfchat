@@ -21,7 +21,6 @@ object SettingsContract {
         // Advanced settings keys for chunked message transfer
         const val KEY_MAX_CHUNK_SIZE = "max_chunk_size"
         const val KEY_CHUNK_DELAY = "chunk_delay"
-        const val KEY_TRANSFER_TIMEOUT = "transfer_timeout"
         const val KEY_TRANSFER_RETRY_TIMEOUT_MS = "transfer_retry_timeout_ms"
     }
 } 
