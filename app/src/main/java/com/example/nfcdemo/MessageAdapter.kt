@@ -103,9 +103,9 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
                 url
             }
             
-            // Prepend http:// if the URL doesn't have a scheme
+            // Prepend https:// if the URL doesn't have a scheme
             val fullUrl = if (!completeUrl.startsWith("http://") && !completeUrl.startsWith("https://")) {
-                "http://$completeUrl"
+                "https://$completeUrl"
             } else {
                 completeUrl
             }
