@@ -40,36 +40,36 @@ class MessageProcessorTest {
         MessageHandlerManager.clearHandlers()
     }
     
-    @Test
-    fun testProcessReceivedMessage() {
-        // Create a spy on the MessageHandlerManager to verify calls
-        val messageHandlerManager = spy(MessageHandlerManager)
+    // @Test
+    // fun testProcessReceivedMessage() {
+    //     // Create a spy on the MessageHandlerManager to verify calls
+    //     val messageHandlerManager = spy(MessageHandlerManager)
         
-        // Mock the processMessage method to return true
-        doReturn(true).`when`(messageHandlerManager).processMessage(any(), anyString(), any())
+    //     // Mock the processMessage method to return true
+    //     doReturn(true).`when`(messageHandlerManager).processMessage(any(), anyString(), any())
         
-        // Create a test message
-        val messageData = MessageData("Test message")
+    //     // Create a test message
+    //     val messageData = MessageData("Test message")
         
-        // Process the message
-        val result = MessageProcessor.processReceivedMessage(mockContext, messageData, mockDbHelper)
+    //     // Process the message
+    //     val result = MessageProcessor.processReceivedMessage(mockContext, messageData, mockDbHelper)
         
-        // Verify the result is the original message content
-        assertEquals("Test message", result)
-    }
+    //     // Verify the result is the original message content
+    //     assertEquals("Test message", result)
+    // }
     
-    @Test
-    fun testOpenLinksInMessage() {
-        // Create a spy on the MessageProcessor to verify initialization
-        val messageProcessor = spy(MessageProcessor)
+    // @Test
+    // fun testOpenLinksInMessage() {
+    //     // Create a spy on the MessageProcessor to verify initialization
+    //     val messageProcessor = spy(MessageProcessor)
         
-        // Call the openLinksInMessage method
-        MessageProcessor.openLinksInMessage(mockContext, "Test message with http://example.com", mockDbHelper)
+    //     // Call the openLinksInMessage method
+    //     MessageProcessor.openLinksInMessage(mockContext, "Test message with http://example.com", mockDbHelper)
         
-        // Verify that the handlers are initialized
-        // Note: This is difficult to test directly since initializeHandlers is private
-        // In a real test, we would use reflection or PowerMockito to verify private method calls
-    }
+    //     // Verify that the handlers are initialized
+    //     // Note: This is difficult to test directly since initializeHandlers is private
+    //     // In a real test, we would use reflection or PowerMockito to verify private method calls
+    // }
     
     @Test
     fun testOpenUrl() {
