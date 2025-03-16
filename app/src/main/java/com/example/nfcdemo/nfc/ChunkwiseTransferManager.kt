@@ -175,16 +175,66 @@ class ChunkwiseTransferManager(private val context: Context) {
             }
         } catch (e: IOException) {
             // Handle communication errors with retry logic
-            handleChunkedTransferError("Error during chunked sending: ${e.message}")
+            Log.e(TAG, "IO error during chunked sending: ${e.message}")
+            
+            // If we're already in retry mode, just return and wait for retry timeout
+            if (isRetryingTransfer) {
+                return false
+            }
+            
+            // If retry timeout is disabled (0), immediately handle error
+            if (transferRetryTimeoutMs <= 0) {
+                handleChunkedTransferError("Error during chunked sending: ${e.message}")
+                return false
+            }
+            
+            // Start retry timeout and wait for reconnection
+            mainHandler.post {
+                onTransferStatusChanged?.invoke(context.getString(R.string.connection_lost_waiting))
+            }
+            startTransferRetryTimeout()
             return false
         } catch (e: TagLostException) {
             // Handle tag lost errors with retry logic
-            handleChunkedTransferError("Tag lost during chunked sending: ${e.message}")
+            Log.e(TAG, "Tag lost during chunked sending: ${e.message}")
+            
+            // If we're already in retry mode, just return and wait for retry timeout
+            if (isRetryingTransfer) {
+                return false
+            }
+            
+            // If retry timeout is disabled (0), immediately handle error
+            if (transferRetryTimeoutMs <= 0) {
+                handleChunkedTransferError("Tag lost during chunked sending: ${e.message}")
+                return false
+            }
+            
+            // Start retry timeout and wait for reconnection
+            mainHandler.post {
+                onTransferStatusChanged?.invoke(context.getString(R.string.tag_lost_waiting))
+            }
+            startTransferRetryTimeout()
             return false
         } catch (e: Exception) {
             // For other exceptions, log and reset
             Log.e(TAG, "Unexpected error during chunked sending: ${e.message}")
-            handleChunkedTransferError("Error during chunked sending: ${e.message}")
+            
+            // If we're already in retry mode, just return and wait for retry timeout
+            if (isRetryingTransfer) {
+                return false
+            }
+            
+            // If retry timeout is disabled (0), immediately handle error
+            if (transferRetryTimeoutMs <= 0) {
+                handleChunkedTransferError("Error during chunked sending: ${e.message}")
+                return false
+            }
+            
+            // Start retry timeout and wait for reconnection
+            mainHandler.post {
+                onTransferStatusChanged?.invoke(context.getString(R.string.error_waiting))
+            }
+            startTransferRetryTimeout()
             return false
         }
     }

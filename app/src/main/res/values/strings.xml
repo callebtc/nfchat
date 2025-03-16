@@ -93,4 +93,11 @@
     <string name="web_view_forward">Forward</string>
     <string name="web_view_close">Close</string>
     <string name="web_view_loading">Loading...</string>
+    
+    <string name="connection_lost_waiting">Connection lost. Waiting for reconnection...</string>
+    <string name="tag_lost_waiting">Tag connection lost. Waiting for reconnection...</string>
+    <string name="error_waiting">Error occurred. Waiting for reconnection...</string>
+    <string name="waiting_for_reconnection">Waiting for reconnection...</string>
+    <string name="retry_timeout_occurred">Retry timeout occurred. Transfer failed.</string>
+    <string name="chunked_transfer_timeout_waiting">Transfer timeout. Waiting for reconnection...</string>
 </resources>

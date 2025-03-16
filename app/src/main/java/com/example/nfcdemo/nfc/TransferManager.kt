@@ -86,11 +86,31 @@ class TransferManager(private val context: Activity) {
         
         chunkwiseTransferManager.onTransferError = { errorMessage ->
             context.runOnUiThread {
-                // Switch to receive mode to recover from error
-                switchToReceiveMode()
+                // Don't switch to receive mode on error - let the retry mechanism handle it
+                // Don't hide the progress bar either, since we're waiting for reconnection
                 
-                // Notify that chunk transfer is completed (even on error)
+                // Show error message
+                Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
+            }
+        }
+        
+        chunkwiseTransferManager.onTransferRetryStarted = {
+            context.runOnUiThread {
+                // Update status to show we're waiting for reconnection
+                onStatusChanged?.invoke(context.getString(R.string.waiting_for_reconnection))
+            }
+        }
+        
+        chunkwiseTransferManager.onTransferRetryTimeout = {
+            context.runOnUiThread {
+                // When retry timeout occurs, we should finally give up and switch to receive mode
+                onStatusChanged?.invoke(context.getString(R.string.retry_timeout_occurred))
+                
+                // Hide the progress bar
                 onChunkTransferCompleted?.invoke()
+                
+                // Switch to receive mode
+                switchToReceiveMode()
             }
         }
         
@@ -274,6 +294,8 @@ class TransferManager(private val context: Activity) {
                     onStatusChanged?.invoke(context.getString(R.string.receiving_chunk, receivedChunks, totalChunks))
                     // Notify about progress
                     chunkwiseTransferManager.onChunkReceiveProgress?.invoke(receivedChunks, totalChunks)
+                    // Notify that chunk transfer is completed to hide the progress bar
+                    onChunkTransferCompleted?.invoke()
                 } else {
                     // This is a progress notification (CHUNK_DATA)
                     Log.d(TAG, "Chunk receive progress: $receivedChunks/$totalChunks")
@@ -325,10 +347,14 @@ class TransferManager(private val context: Activity) {
             if (chunkwiseTransferManager.chunkedTransferState != ChunkedTransferState.IDLE) {
                 // Handle timeout on sender side
                 context.runOnUiThread {
-                    onStatusChanged?.invoke(context.getString(R.string.chunked_transfer_failed))
+                    onStatusChanged?.invoke(context.getString(R.string.chunked_transfer_timeout_waiting))
                     Toast.makeText(context, context.getString(R.string.chunked_transfer_timeout), Toast.LENGTH_LONG).show()
-                    resetChunkedSendMode()
-                    switchToReceiveMode()
+                    
+                    // Don't reset chunked send mode or switch to receive mode
+                    // Instead, start the retry timeout if not already in retry mode
+                    if (!chunkwiseTransferManager.isRetryingTransfer) {
+                        chunkwiseTransferManager.startTransferRetryTimeout()
+                    }
                 }
             } else if (CardEmulationService.instance?.isReceivingChunkedMessage() == true) {
                 // Handle timeout on receiver side
@@ -336,6 +362,8 @@ class TransferManager(private val context: Activity) {
                 context.runOnUiThread {
                     onStatusChanged?.invoke(context.getString(R.string.chunked_transfer_failed))
                     Toast.makeText(context, context.getString(R.string.chunked_transfer_timeout), Toast.LENGTH_LONG).show()
+                    // Hide the progress bar on timeout
+                    onChunkTransferCompleted?.invoke()
                 }
             }
         }
@@ -428,10 +456,12 @@ class TransferManager(private val context: Activity) {
             
         } catch (e: IOException) {
             Log.e(TAG, "Error communicating with tag: ${e.message}")
-            context.runOnUiThread {
-                onStatusChanged?.invoke("Communication error: ${e.message}")
-                switchToReceiveMode()
-            }
+            // Don't switch to receive mode immediately, use the retry mechanism
+            handleTagCommunicationError(e)
+        } catch (e: TagLostException) {
+            Log.e(TAG, "Tag lost: ${e.message}")
+            // Don't switch to receive mode immediately, use the retry mechanism
+            handleTagLostError(e)
         } finally {
             try {
                 isoDep.close()
