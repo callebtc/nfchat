@@ -57,7 +57,7 @@ object MessageProcessor {
             if (url != null) {
                 // Prepend http:// if the URL doesn't have a scheme
                 val fullUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                    "http://$url"
+                    "https://$url"
                 } else {
                     url
                 }

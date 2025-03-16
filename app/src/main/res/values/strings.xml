@@ -38,6 +38,16 @@
     <string name="chunked_transfer_timeout">Transfer timed out. Switching to receive mode.</string>
     <string name="app_launched_by_nfc">App launched by NFC</string>
     
+    <!-- New strings for ChunkwiseTransferManager -->
+    <string name="failed_to_initialize_transfer">Failed to initialize transfer. Waiting for reconnection...</string>
+    <string name="transfer_incomplete">Transfer incomplete. Waiting for reconnection...</string>
+    <string name="connection_lost">Connection lost. Waiting for reconnection...</string>
+    <string name="tag_connection_lost">Tag connection lost. Try again.</string>
+    <string name="tag_connection_lost_waiting">Tag connection lost. Waiting for reconnection...</string>
+    <string name="connection_not_restored">Connection not restored. Switching to receive mode.</string>
+    <string name="error_during_transfer">Error during transfer. Waiting for reconnection...</string>
+    <string name="send_failed_waiting">Send failed. Waiting for reconnection...</string>
+    
     <!-- Settings -->
     <string name="settings_title">Settings</string>
     <string name="back_button">Back</string>
