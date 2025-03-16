@@ -60,6 +60,18 @@
 
     </androidx.appcompat.widget.Toolbar>
 
+    <!-- Progress bar for chunk transfers -->
+    <ProgressBar
+        android:id="@+id/chunkProgressBar"
+        style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:progressTint="@color/accent_color"
+        android:visibility="gone"
+        android:max="100"
+        android:progress="0"
+        android:elevation="4dp"/>
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvMessages"
         android:layout_width="match_parent"

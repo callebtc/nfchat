@@ -1,5 +1,6 @@
 package com.example.nfcdemo
 
+import android.animation.ValueAnimator
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -25,6 +26,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.nfcdemo.data.MessageDbHelper
 import com.example.nfcdemo.data.SettingsContract
 import com.example.nfcdemo.nfc.MessageProcessor
+import com.example.nfcdemo.ui.AnimationUtils
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -48,11 +50,19 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         val timestamp: Date = Date(),
         var id: Long = -1, // Database ID
         var isExpanded: Boolean = false, // Track expanded state
-        val messageId: String = UUID.randomUUID().toString() // Unique message ID for duplicate detection
+        val messageId: String = UUID.randomUUID().toString(), // Unique message ID for duplicate detection
+        var isPending: Boolean = false // Track if message is pending (being sent)
     )
 
     private val messages = mutableListOf<Message>()
     private val dbHelper = MessageDbHelper(context)
+    
+    // Track the currently pending message position
+    private var pendingMessagePosition = -1
+    private var glowAnimator: ValueAnimator? = null
+    
+    // Track the current app state
+    private var appState = AppState.IDLE
     
     // Custom LinkMovementMethod to handle link clicks
     private val customLinkMovementMethod = object : LinkMovementMethod() {
@@ -187,6 +197,15 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
             val sentHolder = holder as SentMessageViewHolder
             sentHolder.bind(message)
             sentHolder.timestamp.text = timeString
+            
+            // Apply glowing animation if this is the pending message AND we're in SENDING mode
+            if (message.isPending && appState == AppState.SENDING) {
+                // Start glowing animation
+                sentHolder.startGlowAnimation()
+            } else {
+                // Stop any existing animation
+                sentHolder.stopGlowAnimation()
+            }
         } else {
             val receivedHolder = holder as ReceivedMessageViewHolder
             receivedHolder.bind(message)
@@ -203,7 +222,10 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
     fun addSentMessage(message: String): Int {
         if (message.isBlank()) return -1
         
-        val newMessage = Message(message, true, false, Date())
+        // Stop any existing pending message animation
+        setPendingMessage(-1)
+        
+        val newMessage = Message(message, true, false, Date(), isPending = true)
         val position = messages.size
         
         // Save to database first
@@ -213,6 +235,10 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         // Add to in-memory list
         messages.add(newMessage)
         notifyItemInserted(position)
+        
+        // Set this as the pending message
+        setPendingMessage(position)
+        
         return position
     }
 
@@ -234,7 +260,11 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
 
     fun markMessageAsDelivered(position: Int) {
         if (position >= 0 && position < messages.size && messages[position].isSent) {
+            // Stop pending animation
+            setPendingMessage(-1)
+            
             messages[position].isDelivered = true
+            messages[position].isPending = false
             
             // Update in database if we have a valid ID
             val messageId = messages[position].id
@@ -242,6 +272,25 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
                 dbHelper.updateMessageDeliveryStatus(messageId, true)
             }
             
+            notifyItemChanged(position)
+        }
+    }
+    
+    /**
+     * Set a message as pending (being sent)
+     * @param position The position of the message to set as pending, or -1 to clear
+     */
+    fun setPendingMessage(position: Int) {
+        // Clear previous pending message
+        if (pendingMessagePosition >= 0 && pendingMessagePosition < messages.size) {
+            messages[pendingMessagePosition].isPending = false
+            notifyItemChanged(pendingMessagePosition)
+        }
+        
+        // Set new pending message
+        pendingMessagePosition = position
+        if (position >= 0 && position < messages.size) {
+            messages[position].isPending = true
             notifyItemChanged(position)
         }
     }
@@ -291,6 +340,8 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         val messageText: TextView = itemView.findViewById(R.id.tvMessageContent)
         val sentCheck: ImageView = itemView.findViewById(R.id.ivSentCheck)
         val timestamp: TextView = itemView.findViewById(R.id.tvTimestamp)
+        private val messageBubble: View = itemView.findViewById(R.id.messageBubble)
+        private var glowAnimator: ValueAnimator? = null
         
         fun bind(message: Message) {
             // Make links clickable
@@ -316,6 +367,30 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
                 copyToClipboard(message.content)
                 true
             }
+        }
+        
+        /**
+         * Start the glowing animation on this message bubble
+         */
+        fun startGlowAnimation() {
+            // Only start if not already animating
+            if (glowAnimator == null) {
+                glowAnimator = AnimationUtils.startGlowAnimation(
+                    messageBubble,
+                    itemView.context
+                )
+            }
+        }
+        
+        /**
+         * Stop the glowing animation on this message bubble
+         */
+        fun stopGlowAnimation() {
+            glowAnimator?.cancel()
+            glowAnimator = null
+            
+            // Reset the background to the default
+            messageBubble.setBackgroundResource(R.drawable.message_sent_background)
         }
     }
     
@@ -357,6 +432,10 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
     // Clean up database resources when adapter is no longer needed
     fun cleanup() {
         dbHelper.close()
+        
+        // Clean up any active animations
+        glowAnimator?.cancel()
+        glowAnimator = null
     }
 
     // Method to get a message at a specific position (for testing)
@@ -377,5 +456,21 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         val truncatedText = fullText.substring(0, MESSAGE_LENGTH_LIMIT) + "... "
         val showMoreText = context.getString(R.string.show_more)
         return truncatedText + showMoreText
+    }
+
+    /**
+     * Update the current app state
+     */
+    fun updateAppState(newState: AppState) {
+        val oldState = appState
+        appState = newState
+        
+        // If we changed from SENDING to another state, or to SENDING from another state,
+        // we need to refresh the pending message to update its animation
+        if (oldState == AppState.SENDING || newState == AppState.SENDING) {
+            if (pendingMessagePosition >= 0) {
+                notifyItemChanged(pendingMessagePosition)
+            }
+        }
     }
 } 

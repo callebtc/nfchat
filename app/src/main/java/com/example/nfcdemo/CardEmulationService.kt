@@ -246,8 +246,8 @@ class CardEmulationService : HostApduService() {
             
             Log.d(TAG, "Initialized chunked message: totalLength=$totalLength, chunkSize=$chunkSize, totalChunks=$totalChunks")
             
-            // Notify the listener
-            onChunkProgressListener?.invoke(receivedChunks, totalChunks)
+            // Notify the listener about the start of a chunk transfer
+            onChunkProgressListener?.invoke(0, totalChunks)
         } else {
             Log.e(TAG, "Failed to parse CHUNK_INIT command: $commandString")
             
@@ -302,7 +302,7 @@ class CardEmulationService : HostApduService() {
                 
                 Log.d(TAG, "Received chunk $chunkIndex: ${data.take(20)}... (${receivedChunks}/$totalChunks)")
                 
-                // Notify the listener
+                // Notify the listener about progress
                 onChunkProgressListener?.invoke(receivedChunks, totalChunks)
             } else {
                 Log.d(TAG, "Chunk $chunkIndex already received")
@@ -374,8 +374,11 @@ class CardEmulationService : HostApduService() {
                 startActivity(intent)
             }
             
-            // Notify the listener
+            // Notify the listener about the received message
             onDataReceivedListener?.invoke(messageData)
+            
+            // Notify the listener that the chunk transfer is complete (for progress bar)
+            onChunkProgressListener?.invoke(totalChunks, totalChunks)
         } else {
             Log.e(TAG, "Failed to parse message data: $completeMessage")
             
@@ -425,4 +428,5 @@ class CardEmulationService : HostApduService() {
         }
         return false
     }
+
 } 

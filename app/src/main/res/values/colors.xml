@@ -6,6 +6,7 @@
     <color name="primary_darker">#121212</color>
     <color name="accent">#FFFFFF</color>
     <color name="accent_light">#EEEEEE</color>
+    <color name="accent_color">#2196F3</color> <!-- Blue accent color for progress bar -->
     
     <color name="background_dark">#121212</color>
     <color name="background_dark_lighter">#1E1E1E</color>

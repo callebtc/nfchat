@@ -9,6 +9,7 @@ import android.util.Log
 import android.widget.Toast
 import com.example.nfcdemo.R
 import java.io.IOException
+import java.nio.charset.Charset
 
 /**
  * Enum representing the different states of chunked message transfer
@@ -58,6 +59,12 @@ class ChunkwiseTransferManager(private val context: Context) {
     var onTransferRetryStarted: (() -> Unit)? = null
     var onTransferRetryTimeout: (() -> Unit)? = null
     
+    // Chunk progress callbacks
+    var onChunkSendStarted: ((Int) -> Unit)? = null
+    var onChunkSendProgress: ((Int, Int) -> Unit)? = null
+    var onChunkReceiveStarted: ((Int) -> Unit)? = null
+    var onChunkReceiveProgress: ((Int, Int) -> Unit)? = null
+    
     /**
      * Update the chunked message settings
      */
@@ -96,6 +103,10 @@ class ChunkwiseTransferManager(private val context: Context) {
         
         chunkedTransferState = ChunkedTransferState.SENDING_CHUNKS
         Log.d(TAG, "Prepared chunked message: ${chunksToSend.size} chunks, total length: $messageLength")
+        
+        // Notify that chunk sending has started
+        onChunkSendStarted?.invoke(totalChunks)
+        
         return true
     }
     
@@ -228,6 +239,8 @@ class ChunkwiseTransferManager(private val context: Context) {
             // Update UI with current progress
             mainHandler.post {
                 onTransferStatusChanged?.invoke(context.getString(R.string.sending_chunk, acknowledgedChunks.size + 1, totalChunks))
+                // Notify about progress - we use acknowledgedChunks.size as the current progress
+                onChunkSendProgress?.invoke(acknowledgedChunks.size, totalChunks)
             }
             
             // Send the chunk
@@ -246,6 +259,11 @@ class ChunkwiseTransferManager(private val context: Context) {
                 if (ackIndex != -1) {
                     Log.d(TAG, "Chunk $ackIndex acknowledged")
                     acknowledgedChunks.add(ackIndex)
+                    
+                    // Notify about progress after acknowledgment
+                    mainHandler.post {
+                        onChunkSendProgress?.invoke(acknowledgedChunks.size, totalChunks)
+                    }
                     
                     // Reset the transfer timeout since we got a response
                     startTransferTimeout()

@@ -47,6 +47,8 @@ import com.example.nfcdemo.nfc.TransferManager
 import com.example.nfcdemo.handlers.CashuHandler
 import com.example.nfcdemo.handlers.LinkHandler
 import com.example.nfcdemo.handlers.MessageHandlerManager
+import android.widget.ProgressBar
+import com.example.nfcdemo.ui.AnimationUtils
 
 /**
  * Enum representing the different states of the app
@@ -69,6 +71,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     private lateinit var rvMessages: RecyclerView
     private lateinit var messageAdapter: MessageAdapter
     private lateinit var dbHelper: MessageDbHelper
+    private lateinit var chunkProgressBar: ProgressBar
     
     // Replace boolean flags with a single state enum
     private var appState = AppState.IDLE
@@ -113,6 +116,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         btnSendMode = findViewById(R.id.btnSendMode)
         btnSettings = findViewById(R.id.btnSettings)
         rvMessages = findViewById(R.id.rvMessages)
+        chunkProgressBar = findViewById(R.id.chunkProgressBar)
         
         // Set up RecyclerView
         messageAdapter = MessageAdapter(this)
@@ -255,6 +259,9 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         transferManager.onAppStateChanged = { newState ->
             appState = newState
             updateModeIndicators()
+            
+            // Update the message adapter with the new app state
+            messageAdapter.updateAppState(newState)
         }
         
         transferManager.onStatusChanged = { status ->
@@ -287,6 +294,35 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         
         transferManager.onVibrate = { duration ->
             vibrate(duration)
+        }
+        
+        // Add callbacks for chunk transfer progress
+        transferManager.onChunkTransferStarted = { totalChunks ->
+            mainHandler.post {
+                // Show the progress bar
+                AnimationUtils.showProgressBar(chunkProgressBar)
+                // Reset progress to 0
+                AnimationUtils.updateProgressBar(chunkProgressBar, 0)
+                Log.d(TAG, "Chunk transfer started: $totalChunks chunks total")
+            }
+        }
+        
+        transferManager.onChunkTransferProgress = { currentChunk, totalChunks ->
+            mainHandler.post {
+                // Calculate progress percentage
+                val progress = ((currentChunk.toFloat() / totalChunks) * 100).toInt()
+                // Update the progress bar
+                AnimationUtils.updateProgressBar(chunkProgressBar, progress)
+                Log.d(TAG, "Chunk transfer progress: $currentChunk/$totalChunks ($progress%)")
+            }
+        }
+        
+        transferManager.onChunkTransferCompleted = {
+            mainHandler.post {
+                // Hide the progress bar
+                AnimationUtils.hideProgressBar(chunkProgressBar)
+                Log.d(TAG, "Chunk transfer completed")
+            }
         }
     }
     

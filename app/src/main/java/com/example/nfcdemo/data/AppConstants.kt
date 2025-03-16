@@ -7,11 +7,11 @@ object AppConstants {
     // Default settings values
     object DefaultSettings {
         // Link settings
-        const val AUTO_OPEN_LINKS = true
+        const val AUTO_OPEN_LINKS = false
         const val USE_INTERNAL_BROWSER = false
         
         // Sharing settings
-        const val AUTO_SEND_SHARED = true
+        const val AUTO_SEND_SHARED = false
         const val CLOSE_AFTER_SHARED_SEND = false
         
         // Background behavior settings

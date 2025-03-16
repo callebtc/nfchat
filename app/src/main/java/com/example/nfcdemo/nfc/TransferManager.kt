@@ -44,6 +44,11 @@ class TransferManager(private val context: Activity) {
     var onMessageReceived: ((MessageData, Boolean) -> Unit)? = null
     var onVibrate: ((Long) -> Unit)? = null
     
+    // Chunk transfer callbacks
+    var onChunkTransferStarted: ((Int) -> Unit)? = null
+    var onChunkTransferProgress: ((Int, Int) -> Unit)? = null
+    var onChunkTransferCompleted: (() -> Unit)? = null
+    
     init {
         // Initialize NFC adapter
         nfcAdapter = NfcAdapter.getDefaultAdapter(context)
@@ -73,6 +78,9 @@ class TransferManager(private val context: Activity) {
                 
                 // Switch to receive mode automatically
                 switchToReceiveMode()
+                
+                // Notify that chunk transfer is completed
+                onChunkTransferCompleted?.invoke()
             }
         }
         
@@ -80,6 +88,38 @@ class TransferManager(private val context: Activity) {
             context.runOnUiThread {
                 // Switch to receive mode to recover from error
                 switchToReceiveMode()
+                
+                // Notify that chunk transfer is completed (even on error)
+                onChunkTransferCompleted?.invoke()
+            }
+        }
+        
+        // Add callbacks for chunk transfer progress
+        chunkwiseTransferManager.onChunkSendStarted = { totalChunks ->
+            context.runOnUiThread {
+                // Notify that chunk transfer has started
+                onChunkTransferStarted?.invoke(totalChunks)
+            }
+        }
+        
+        chunkwiseTransferManager.onChunkSendProgress = { currentChunk, totalChunks ->
+            context.runOnUiThread {
+                // Notify about chunk transfer progress
+                onChunkTransferProgress?.invoke(currentChunk, totalChunks)
+            }
+        }
+        
+        chunkwiseTransferManager.onChunkReceiveStarted = { totalChunks ->
+            context.runOnUiThread {
+                // Notify that chunk receive has started
+                onChunkTransferStarted?.invoke(totalChunks)
+            }
+        }
+        
+        chunkwiseTransferManager.onChunkReceiveProgress = { currentChunk, totalChunks ->
+            context.runOnUiThread {
+                // Notify about chunk receive progress
+                onChunkTransferProgress?.invoke(currentChunk, totalChunks)
             }
         }
     }
@@ -220,8 +260,27 @@ class TransferManager(private val context: Activity) {
             startTransferTimeout()
             
             mainHandler.post {
-                if (receivedChunks > 0) {
+                if (receivedChunks == 0) {
+                    // This is the initial notification (CHUNK_INIT)
+                    Log.d(TAG, "Chunk receive started: $totalChunks chunks total")
+                    // Notify that chunk receive has started
+                    chunkwiseTransferManager.onChunkReceiveStarted?.invoke(totalChunks)
+                    // Update status text
                     onStatusChanged?.invoke(context.getString(R.string.receiving_chunk, receivedChunks, totalChunks))
+                } else if (receivedChunks == totalChunks) {
+                    // This is the final notification (CHUNK_COMPLETE)
+                    Log.d(TAG, "Chunk receive completed: $receivedChunks/$totalChunks")
+                    // Update status text
+                    onStatusChanged?.invoke(context.getString(R.string.receiving_chunk, receivedChunks, totalChunks))
+                    // Notify about progress
+                    chunkwiseTransferManager.onChunkReceiveProgress?.invoke(receivedChunks, totalChunks)
+                } else {
+                    // This is a progress notification (CHUNK_DATA)
+                    Log.d(TAG, "Chunk receive progress: $receivedChunks/$totalChunks")
+                    // Update status text
+                    onStatusChanged?.invoke(context.getString(R.string.receiving_chunk, receivedChunks, totalChunks))
+                    // Notify about progress
+                    chunkwiseTransferManager.onChunkReceiveProgress?.invoke(receivedChunks, totalChunks)
                 }
             }
         }
@@ -240,6 +299,9 @@ class TransferManager(private val context: Activity) {
                 if (appState != AppState.RECEIVING) {
                     switchToReceiveMode()
                 }
+                
+                // Hide the progress bar on error
+                onChunkTransferCompleted?.invoke()
             }
         }
     }
