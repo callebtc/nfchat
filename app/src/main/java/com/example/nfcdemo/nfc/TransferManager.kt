@@ -383,6 +383,7 @@ class TransferManager(private val context: Activity) {
      * Request data from an NFC tag
      */
     private fun requestDataFromTag(isoDep: IsoDep) {
+        Log.d(TAG, "Requesting data from tag")
         val getCommand = NfcProtocol.createGetDataCommand()
         val getResult = isoDep.transceive(getCommand)
         
