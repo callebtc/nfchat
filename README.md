@@ -68,11 +68,19 @@ Available targets:
 
 ## Continuous Integration
 
-This project uses GitHub Actions for continuous integration. The workflow automatically runs all unit tests on:
+This project uses GitHub Actions for continuous integration. The workflow automatically runs all unit tests and generates coverage reports on:
 - Every push to the main branch
 - Every pull request to the main branch
 
 The workflow configuration can be found in `.github/workflows/android-tests.yml`.
+
+### CI Artifacts
+
+After each CI run, the following artifacts are available:
+- **Test Reports**: Detailed reports of all test executions
+- **Coverage Reports**: Code coverage analysis showing which parts of the code are tested
+
+These artifacts can be downloaded from the GitHub Actions workflow run page.
 
 ### CI Status
 
