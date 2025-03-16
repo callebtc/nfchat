@@ -41,6 +41,9 @@ import com.example.nfcdemo.nfc.MessageData
 import com.example.nfcdemo.nfc.MessageProcessor
 import com.example.nfcdemo.nfc.NfcProtocol
 import android.content.BroadcastReceiver
+import com.example.nfcdemo.nfc.ChunkwiseTransferManager
+import com.example.nfcdemo.nfc.ChunkedTransferState
+import com.example.nfcdemo.nfc.TransferManager
 
 /**
  * Enum representing the different states of the app
@@ -51,23 +54,11 @@ enum class AppState {
     SENDING     // Actively sending a message
 }
 
-/**
- * Enum representing the different states of chunked message transfer
- */
-enum class ChunkedTransferState {
-    IDLE,               // Not in chunked transfer mode
-    INITIALIZING,       // Preparing for chunked transfer
-    SENDING_CHUNKS,     // Actively sending chunks
-    COMPLETING,         // Finalizing the transfer
-    ERROR               // An error occurred during transfer
-}
-
 class MainActivity : Activity(), ReaderCallback {
 
     private val TAG = "MainActivity"
     private val mainHandler = Handler(Looper.getMainLooper())
     
-    private var nfcAdapter: NfcAdapter? = null
     private lateinit var etMessage: EditText
     private lateinit var tvStatus: TextView
     private lateinit var btnSendMode: LinearLayout
@@ -92,26 +83,8 @@ class MainActivity : Activity(), ReaderCallback {
     private lateinit var intentFilters: Array<IntentFilter>
     private lateinit var techLists: Array<Array<String>>
     
-    // Chunked message transfer state
-    private var chunkedTransferState = ChunkedTransferState.IDLE
-    private var chunksToSend = mutableListOf<String>()
-    private var currentChunkIndex = 0
-    private var totalChunks = 0
-    private var maxChunkSize = AppConstants.DefaultSettings.MAX_CHUNK_SIZE
-    private var chunkDelay = AppConstants.DefaultSettings.CHUNK_DELAY_MS
-    private var transferRetryTimeoutMs = AppConstants.DefaultSettings.TRANSFER_RETRY_TIMEOUT_MS
-    private var acknowledgedChunks = mutableSetOf<Int>()
-    private var chunkSendAttempts = mutableMapOf<Int, Int>()
-    private val MAX_SEND_ATTEMPTS = AppConstants.DefaultSettings.MAX_SEND_ATTEMPTS
-    
-    // Transfer timeout handler
-    private var transferTimeoutHandler: Handler? = null
-    private var transferTimeoutRunnable: Runnable? = null
-    
-    // Transfer retry timeout handler
-    private var transferRetryTimeoutHandler: Handler? = null
-    private var transferRetryTimeoutRunnable: Runnable? = null
-    private var isRetryingTransfer = false
+    // Transfer manager for handling NFC operations
+    private lateinit var transferManager: TransferManager
 
     private var backgroundNfcEnabled = true
     private val settingsChangeReceiver = object : BroadcastReceiver() {
@@ -149,12 +122,12 @@ class MainActivity : Activity(), ReaderCallback {
         // Set the message length limit
         setMessageLengthLimit(messageLengthLimit)
         
-        // Load chunked message settings
-        loadChunkedMessageSettings()
+        // Initialize transfer manager
+        transferManager = TransferManager(this)
+        setupTransferManagerCallbacks()
 
-        // Initialize NFC
-        nfcAdapter = NfcAdapter.getDefaultAdapter(this)
-        if (nfcAdapter == null) {
+        // Check if NFC is available
+        if (transferManager.getNfcAdapter() == null) {
             tvStatus.text = getString(R.string.nfc_not_available)
             Toast.makeText(this, getString(R.string.nfc_not_available), Toast.LENGTH_LONG).show()
             btnSendMode.isEnabled = false
@@ -242,6 +215,7 @@ class MainActivity : Activity(), ReaderCallback {
             
             // Store the message to send
             lastSentMessage = etMessage.text.toString()
+            transferManager.setLastSentMessage(lastSentMessage)
             
             // Add the message to the chat as a sent message and save to database
             saveAndAddMessage(lastSentMessage, true)
@@ -250,7 +224,7 @@ class MainActivity : Activity(), ReaderCallback {
             etMessage.text.clear()
             
             // Switch to send mode
-            switchToSendMode()
+            transferManager.switchToSendMode()
         }
         
         // Settings button
@@ -261,7 +235,49 @@ class MainActivity : Activity(), ReaderCallback {
         
         // Status text view - toggle between send and receive modes
         tvStatus.setOnClickListener {
-            toggleMode()
+            transferManager.toggleMode()
+        }
+    }
+    
+    /**
+     * Set up callbacks for the transfer manager
+     */
+    private fun setupTransferManagerCallbacks() {
+        transferManager.onAppStateChanged = { newState ->
+            appState = newState
+            updateModeIndicators()
+        }
+        
+        transferManager.onStatusChanged = { status ->
+            tvStatus.text = status
+        }
+        
+        transferManager.onMessageSent = { position ->
+            // Mark the message as delivered
+            val lastPosition = if (position == -1) messageAdapter.itemCount - 1 else position
+            messageAdapter.markMessageAsDelivered(lastPosition)
+            
+            // Check if we should close the app after sending a shared message
+            val shouldClose = handlePostSendActions()
+            if (!shouldClose) {
+                // Clear the sent message to prevent re-sending
+                lastSentMessage = ""
+                
+                // Scroll to bottom
+                scrollToBottom()
+            }
+        }
+        
+        transferManager.onMessageReceived = { messageData, _ ->
+            // Update UI on the main thread and save to database
+            saveAndAddMessage(messageData.content, false)
+            
+            // Process the message (e.g., open links)
+            MessageProcessor.processReceivedMessage(this, messageData, dbHelper)
+        }
+        
+        transferManager.onVibrate = { duration ->
+            vibrate(duration)
         }
     }
     
@@ -269,80 +285,7 @@ class MainActivity : Activity(), ReaderCallback {
      * Toggle between send and receive modes when the status text is tapped
      */
     private fun toggleMode() {
-        when (appState) {
-            AppState.SENDING -> {
-                // If in send mode, switch to receive mode
-                switchToReceiveMode()
-            }
-            AppState.RECEIVING -> {
-                // If in receive mode, try to switch to send mode if there's a pending message
-                if (lastSentMessage.isNotEmpty()) {
-                    switchToSendMode()
-                } else {
-                    // No pending message to send
-                    Toast.makeText(this, getString(R.string.no_pending_message), Toast.LENGTH_SHORT).show()
-                }
-            }
-            AppState.IDLE -> {
-                // If in idle mode, switch to receive mode
-                switchToReceiveMode()
-            }
-        }
-    }
-    
-    /**
-     * Switch to send mode and attempt to send the pending message
-     */
-    private fun switchToSendMode() {
-        // Only proceed if there's a message to send
-        if (lastSentMessage.isEmpty()) {
-            Log.d(TAG, "No message to send, not switching to send mode")
-            return
-        }
-        
-        // First, stop any receive mode operations
-        if (appState == AppState.RECEIVING) {
-            // Stop the CardEmulationService
-            val intent = Intent(this, CardEmulationService::class.java)
-            stopService(intent)
-        }
-        
-        // Update state
-        appState = AppState.SENDING
-        updateModeIndicators()
-        tvStatus.text = getString(R.string.status_send_mode)
-        
-        // Enable reader mode for sending data
-        enableReaderMode()
-        
-        Log.d(TAG, "Switched to send mode, ready to send: $lastSentMessage")
-    }
-    
-    /**
-     * Switch to receive mode
-     */
-    private fun switchToReceiveMode() {
-        // First, disable reader mode if we were in send mode
-        if (appState == AppState.SENDING) {
-            disableReaderMode()
-        }
-        
-        // Update state
-        appState = AppState.RECEIVING
-        updateModeIndicators()
-        tvStatus.text = getString(R.string.status_receive_mode)
-        
-        // Start the CardEmulationService
-        val intent = Intent(this, CardEmulationService::class.java)
-        startService(intent)
-        
-        // Set up the message and listener
-        mainHandler.postDelayed({
-            CardEmulationService.instance?.messageToShare = etMessage.text.toString()
-            setupDataReceiver()
-        }, 100)
-        
-        Log.d(TAG, "Switched to receive mode")
+        transferManager.toggleMode()
     }
     
     /**
@@ -395,9 +338,10 @@ class MainActivity : Activity(), ReaderCallback {
     }
     
     private fun enableForegroundDispatch() {
+        val nfcAdapter = transferManager.getNfcAdapter()
         if (nfcAdapter != null) {
             try {
-                nfcAdapter?.enableForegroundDispatch(this, pendingIntent, intentFilters, techLists)
+                nfcAdapter.enableForegroundDispatch(this, pendingIntent, intentFilters, techLists)
                 Log.d(TAG, "Foreground dispatch enabled")
             } catch (e: IllegalStateException) {
                 Log.e(TAG, "Error enabling foreground dispatch", e)
@@ -406,9 +350,10 @@ class MainActivity : Activity(), ReaderCallback {
     }
     
     private fun disableForegroundDispatch() {
+        val nfcAdapter = transferManager.getNfcAdapter()
         if (nfcAdapter != null) {
             try {
-                nfcAdapter?.disableForegroundDispatch(this)
+                nfcAdapter.disableForegroundDispatch(this)
                 Log.d(TAG, "Foreground dispatch disabled")
             } catch (e: IllegalStateException) {
                 Log.e(TAG, "Error disabling foreground dispatch", e)
@@ -447,7 +392,7 @@ class MainActivity : Activity(), ReaderCallback {
             Log.d(TAG, "App brought to foreground from background message receive")
             // Make sure we're in receive mode
             if (appState != AppState.RECEIVING) {
-                switchToReceiveMode()
+                transferManager.switchToReceiveMode()
             }
             return
         }
@@ -487,11 +432,11 @@ class MainActivity : Activity(), ReaderCallback {
             if (appState != AppState.SENDING) {
                 // Make sure we're in receive mode
                 if (appState != AppState.RECEIVING) {
-                    switchToReceiveMode()
+                    transferManager.switchToReceiveMode()
                 }
                 
                 // Process the tag
-                onTagDiscovered(it)
+                transferManager.handleTagDiscovered(it)
                 
                 // Vibrate to indicate NFC detection
                 vibrate(100)
@@ -503,814 +448,6 @@ class MainActivity : Activity(), ReaderCallback {
             }
         } ?: run {
             Log.e(TAG, "No tag found in intent")
-        }
-    }
-    
-    private fun setupDataReceiver() {
-        // This is a critical function to ensure UI updates happen
-        CardEmulationService.instance?.onDataReceivedListener = { messageData ->
-            Log.d(TAG, "Data received in MainActivity: ${messageData.content}")
-            
-            // Check if this is a duplicate message based on ID
-            if (messageData.id != lastReceivedMessageId) {
-                lastReceivedMessageId = messageData.id
-                
-                mainHandler.post {
-                    // Update UI on the main thread and save to database
-                    saveAndAddMessage(messageData.content, false)
-                    
-                    // Show "Ready to receive" status instead of "Message received"
-                    tvStatus.text = getString(R.string.status_receive_mode)
-                    
-                    // Vibrate on message received
-                    vibrate(200)
-                    
-                    // Process the message (e.g., open links)
-                    MessageProcessor.processReceivedMessage(this, messageData, dbHelper)
-                }
-            } else {
-                Log.d(TAG, "Duplicate message received (same ID), ignoring: ${messageData.id}")
-            }
-        }
-        
-        // Set up chunk progress listener
-        CardEmulationService.instance?.onChunkProgressListener = { receivedChunks, totalChunks ->
-            // Cancel any existing timeout
-            cancelTransferTimeout()
-            
-            // Start a new timeout
-            startTransferTimeout()
-            
-            mainHandler.post {
-                if (receivedChunks > 0) {
-                    tvStatus.text = getString(R.string.receiving_chunk, receivedChunks, totalChunks)
-                }
-            }
-        }
-        
-        // Set up chunk error listener
-        CardEmulationService.instance?.onChunkErrorListener = { errorMessage ->
-            // Cancel any existing timeout
-            cancelTransferTimeout()
-            
-            mainHandler.post {
-                Log.e(TAG, "Chunk error: $errorMessage")
-                tvStatus.text = getString(R.string.chunked_transfer_failed)
-                Toast.makeText(this, getString(R.string.chunked_transfer_error_receiver, errorMessage), Toast.LENGTH_LONG).show()
-                
-                // Make sure we're in receive mode to recover from the error
-                if (appState != AppState.RECEIVING) {
-                    switchToReceiveMode()
-                }
-            }
-        }
-    }
-    
-    /**
-     * Start a timeout for chunked transfers
-     */
-    private fun startTransferTimeout() {
-        // Cancel any existing timeout first
-        cancelTransferTimeout()
-        
-        // Create a new timeout handler if needed
-        if (transferTimeoutHandler == null) {
-            transferTimeoutHandler = Handler(Looper.getMainLooper())
-        }
-        
-        // Create a new timeout runnable
-        transferTimeoutRunnable = Runnable {
-            Log.e(TAG, "Transfer timeout occurred")
-            
-            if (chunkedTransferState != ChunkedTransferState.IDLE) {
-                // Handle timeout on sender side
-                runOnUiThread {
-                    tvStatus.text = getString(R.string.chunked_transfer_failed)
-                    Toast.makeText(this, getString(R.string.chunked_transfer_timeout), Toast.LENGTH_LONG).show()
-                    resetChunkedSendMode()
-                    switchToReceiveMode()
-                }
-            } else if (CardEmulationService.instance?.isReceivingChunkedMessage() == true) {
-                // Handle timeout on receiver side
-                CardEmulationService.instance?.resetChunkedMessageState()
-                runOnUiThread {
-                    tvStatus.text = getString(R.string.chunked_transfer_failed)
-                    Toast.makeText(this, getString(R.string.chunked_transfer_timeout), Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-        
-        // Schedule the timeout
-        transferTimeoutHandler?.postDelayed(transferTimeoutRunnable!!, transferRetryTimeoutMs)
-    }
-    
-    /**
-     * Cancel any active transfer timeout
-     */
-    private fun cancelTransferTimeout() {
-        transferTimeoutRunnable?.let {
-            transferTimeoutHandler?.removeCallbacks(it)
-            transferTimeoutRunnable = null
-        }
-    }
-    
-    /**
-     * Automatically open links in a message if auto-open links is enabled
-     */
-    private fun openLinksInMessage(message: String) {
-        // Check if auto-open links is enabled
-        if (!dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, AppConstants.DefaultSettings.AUTO_OPEN_LINKS)) {
-            return
-        }
-        
-        // Find URLs in the message
-        val matcher = Patterns.WEB_URL.matcher(message)
-        if (matcher.find()) {
-            val url = matcher.group()
-            if (url != null) {
-                // Prepend http:// if the URL doesn't have a scheme
-                val fullUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                    "http://$url"
-                } else {
-                    url
-                }
-                
-                // Check if we should use the internal browser
-                val useInternalBrowser = dbHelper.getBooleanSetting(
-                    SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
-                    AppConstants.DefaultSettings.USE_INTERNAL_BROWSER
-                )
-                
-                if (useInternalBrowser) {
-                    // Check if there's already a WebViewActivity open
-                    val currentWebView = WebViewActivityManager.getCurrentWebViewActivity()
-                    if (currentWebView != null) {
-                        // Close the existing WebView first
-                        currentWebView.finish()
-                        
-                        // Small delay to ensure the previous activity is properly closed
-                        mainHandler.postDelayed({
-                            // Open the URL in a new WebView
-                            val intent = Intent(this, WebViewActivity::class.java)
-                            intent.putExtra(WebViewActivity.EXTRA_URL, fullUrl)
-                            startActivity(intent)
-                        }, 100)
-                    } else {
-                        // Open the URL in an internal WebView
-                        val intent = Intent(this, WebViewActivity::class.java)
-                        intent.putExtra(WebViewActivity.EXTRA_URL, fullUrl)
-                        startActivity(intent)
-                    }
-                } else {
-                    // Open the URL in an external browser
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
-                    startActivity(intent)
-                }
-            }
-        }
-    }
-    
-    private fun updateModeIndicators() {
-        btnSendMode.isSelected = appState == AppState.SENDING
-    }
-
-    override fun onResume() {
-        super.onResume()
-        
-        // Register for background NFC setting changes
-        val filter = IntentFilter(SettingsActivity.ACTION_BACKGROUND_NFC_SETTING_CHANGED)
-        registerReceiver(settingsChangeReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        
-        // Enable foreground dispatch to intercept all NFC intents
-        enableForegroundDispatch()
-        
-        if (appState == AppState.SENDING || isRetryingTransfer) {
-            enableReaderMode()
-        }
-        
-        // Update the service with the latest message if in receive mode
-        if (appState == AppState.RECEIVING) {
-            CardEmulationService.instance?.messageToShare = etMessage.text.toString()
-            // Re-establish the data receiver connection
-            setupDataReceiver()
-        }
-        
-        // Reload chunked message settings in case they were changed
-        loadChunkedMessageSettings()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        
-        // Unregister the receiver
-        try {
-            unregisterReceiver(settingsChangeReceiver)
-        } catch (e: IllegalArgumentException) {
-            // Receiver not registered
-        }
-        
-        // Only disable reader mode if we're not in retry mode
-        if (!isRetryingTransfer) {
-            disableReaderMode()
-        }
-        
-        disableForegroundDispatch()
-    }
-    
-    override fun onDestroy() {
-        super.onDestroy()
-        // Clean up database resources
-        messageAdapter.cleanup()
-        dbHelper.close()
-        
-        // Cancel any active timeouts
-        cancelTransferTimeout()
-        cancelTransferRetryTimeout()
-        
-        // If we're not in receive mode anymore, stop the service
-        if (appState != AppState.RECEIVING) {
-            val intent = Intent(this, CardEmulationService::class.java)
-            stopService(intent)
-        }
-    }
-
-    private fun enableReaderMode() {
-        nfcAdapter?.enableReaderMode(this, this,
-            NfcAdapter.FLAG_READER_NFC_A or
-                    NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK,
-            null)
-    }
-
-    private fun disableReaderMode() {
-        nfcAdapter?.disableReaderMode(this)
-    }
-
-    override fun onTagDiscovered(tag: Tag) {
-        val isoDep = IsoDep.get(tag) ?: return
-        
-        try {
-            isoDep.connect()
-            Log.d(TAG, "Connected to tag")
-            
-            // If we were in retry mode, cancel the retry timeout
-            if (isRetryingTransfer) {
-                cancelTransferRetryTimeout()
-                isRetryingTransfer = false
-                runOnUiThread {
-                    tvStatus.text = "Connection restored. Continuing transfer..."
-                }
-            }
-            
-            // Select our AID
-            val selectApdu = NfcProtocol.buildSelectApdu(NfcProtocol.DEFAULT_AID)
-            val result = isoDep.transceive(selectApdu)
-            
-            if (!NfcProtocol.isSuccess(result)) {
-                Log.e(TAG, "Error selecting AID: ${NfcProtocol.byteArrayToHex(result)}")
-                return
-            }
-            
-            when (appState) {
-                AppState.SENDING -> {
-                    if (chunkedTransferState == ChunkedTransferState.SENDING_CHUNKS) {
-                        // Handle chunked message sending
-                        handleChunkedMessageSending(isoDep)
-                    } else {
-                        // Check if the message is too long and needs to be chunked
-                        val message = lastSentMessage
-                        if (message.length > maxChunkSize) {
-                            // Prepare for chunked sending
-                            prepareChunkedMessageSending(message)
-                            // Start chunked sending
-                            handleChunkedMessageSending(isoDep)
-                        } else {
-                            // Send data to the HCE device (normal mode)
-                            sendRegularMessage(isoDep, message)
-                        }
-                    }
-                }
-                else -> {
-                    // Request data from the HCE device
-                    requestDataFromTag(isoDep)
-                }
-            }
-            
-        } catch (e: IOException) {
-            handleTagCommunicationError(e)
-        } catch (e: TagLostException) {
-            handleTagLostError(e)
-        } finally {
-            try {
-                isoDep.close()
-            } catch (e: IOException) {
-                Log.e(TAG, "Error closing tag connection: ${e.message}")
-            }
-        }
-    }
-    
-    /**
-     * Request data from an NFC tag
-     */
-    private fun requestDataFromTag(isoDep: IsoDep) {
-        val getCommand = NfcProtocol.createGetDataCommand()
-        val getResult = isoDep.transceive(getCommand)
-        
-        if (NfcProtocol.isSuccess(getResult)) {
-            // Extract the data (remove the status word)
-            val dataBytes = getResult.copyOfRange(0, getResult.size - 2)
-            val receivedMessage = String(dataBytes, Charset.forName("UTF-8"))
-            
-            // Parse the JSON message
-            val messageData = MessageData.fromJson(receivedMessage)
-            
-            if (messageData != null) {
-                // Check if this is a duplicate message based on ID
-                if (messageData.id != lastReceivedMessageId) {
-                    lastReceivedMessageId = messageData.id
-                    
-                    runOnUiThread {
-                        // Add the message to the chat and save to database
-                        saveAndAddMessage(messageData.content, false)
-                        tvStatus.text = getString(R.string.status_receive_mode)
-                        
-                        // Vibrate on message received
-                        vibrate(200)
-                        
-                        // Process the message (e.g., open links)
-                        MessageProcessor.processReceivedMessage(this, messageData, dbHelper)
-                    }
-                } else {
-                    Log.d(TAG, "Duplicate message received (same ID), ignoring: ${messageData.id}")
-                    // Don't update UI or vibrate for duplicate messages
-                }
-            } else {
-                Log.e(TAG, "Failed to parse message data: $receivedMessage")
-            }
-        }
-    }
-    
-    /**
-     * Handle communication errors with the NFC tag
-     */
-    private fun handleTagCommunicationError(e: IOException) {
-        Log.e(TAG, "Error communicating with tag: ${e.message}")
-        
-        // If retry timeout is disabled (0), immediately reset
-        if (transferRetryTimeoutMs <= 0) {
-            resetAndSwitchToReceiveMode("Communication error: ${e.message}")
-            return
-        }
-        
-        // If we're already retrying, don't start another retry timer
-        if (isRetryingTransfer) {
-            return
-        }
-        
-        // Update UI to show we're waiting for reconnection
-        runOnUiThread {
-            tvStatus.text = "Connection lost. Waiting for reconnection..."
-        }
-        
-        // Start retry timeout
-        startTransferRetryTimeout()
-    }
-    
-    /**
-     * Handle tag lost errors
-     */
-    private fun handleTagLostError(e: TagLostException) {
-        Log.e(TAG, "Tag lost: ${e.message}")
-        
-        // If retry timeout is disabled (0), immediately reset
-        if (transferRetryTimeoutMs <= 0) {
-            resetAndSwitchToReceiveMode("Tag connection lost. Try again.")
-            return
-        }
-        
-        // If we're already retrying, don't start another retry timer
-        if (isRetryingTransfer) {
-            return
-        }
-        
-        // Update UI to show we're waiting for reconnection
-        runOnUiThread {
-            tvStatus.text = "Tag connection lost. Waiting for reconnection..."
-        }
-        
-        // Start retry timeout
-        startTransferRetryTimeout()
-    }
-    
-    /**
-     * Start a timeout for transfer retry
-     * After this timeout, we'll give up and switch to receive mode
-     */
-    private fun startTransferRetryTimeout() {
-        // Mark that we're in retry mode
-        isRetryingTransfer = true
-        
-        // Cancel any existing retry timeout
-        cancelTransferRetryTimeout()
-        
-        // Create a new timeout handler if needed
-        if (transferRetryTimeoutHandler == null) {
-            transferRetryTimeoutHandler = Handler(Looper.getMainLooper())
-        }
-        
-        // Create a new timeout runnable
-        transferRetryTimeoutRunnable = Runnable {
-            Log.e(TAG, "Transfer retry timeout occurred")
-            
-            // Reset retry flag
-            isRetryingTransfer = false
-            
-            // Reset and switch to receive mode
-            resetAndSwitchToReceiveMode("Connection not restored. Switching to receive mode.")
-        }
-        
-        // Schedule the timeout
-        transferRetryTimeoutHandler?.postDelayed(transferRetryTimeoutRunnable!!, transferRetryTimeoutMs)
-    }
-    
-    /**
-     * Cancel any active transfer retry timeout
-     */
-    private fun cancelTransferRetryTimeout() {
-        transferRetryTimeoutRunnable?.let {
-            transferRetryTimeoutHandler?.removeCallbacks(it)
-            transferRetryTimeoutRunnable = null
-        }
-    }
-    
-    /**
-     * Reset all transfer state and switch to receive mode with a status message
-     */
-    private fun resetAndSwitchToReceiveMode(statusMessage: String) {
-        // Cancel any active timeouts
-        cancelTransferTimeout()
-        cancelTransferRetryTimeout()
-        
-        runOnUiThread {
-            // Update status
-            tvStatus.text = statusMessage
-            
-            // If we were in chunked send mode, show a more specific error message
-            if (chunkedTransferState == ChunkedTransferState.SENDING_CHUNKS) {
-                Toast.makeText(this, getString(R.string.chunked_transfer_error, "Connection lost"), Toast.LENGTH_LONG).show()
-                resetChunkedSendMode()
-            }
-            
-            // Reset retry flag
-            isRetryingTransfer = false
-            
-            // Switch to receive mode to recover from error
-            switchToReceiveMode()
-        }
-    }
-    
-    /**
-     * Prepare for chunked message sending by splitting the message into chunks
-     */
-    private fun prepareChunkedMessageSending(message: String) {
-        // Reset chunked sending state
-        chunksToSend.clear()
-        acknowledgedChunks.clear()
-        chunkSendAttempts.clear()
-        currentChunkIndex = 0
-        
-        // Create a MessageData object with the message content and a unique ID
-        val messageData = MessageData(message)
-        val jsonMessage = messageData.toJson()
-        
-        // Split the message into chunks
-        val messageLength = jsonMessage.length
-        totalChunks = (messageLength + maxChunkSize - 1) / maxChunkSize // Ceiling division
-        
-        for (i in 0 until totalChunks) {
-            val startIndex = i * maxChunkSize
-            val endIndex = minOf(startIndex + maxChunkSize, messageLength)
-            val chunk = jsonMessage.substring(startIndex, endIndex)
-            chunksToSend.add(chunk)
-            chunkSendAttempts[i] = 0
-        }
-        
-        chunkedTransferState = ChunkedTransferState.SENDING_CHUNKS
-        Log.d(TAG, "Prepared chunked message: ${chunksToSend.size} chunks, total length: $messageLength")
-    }
-    
-    /**
-     * Handle the chunked message sending process
-     */
-    private fun handleChunkedMessageSending(isoDep: IsoDep) {
-        if (chunkedTransferState != ChunkedTransferState.SENDING_CHUNKS || chunksToSend.isEmpty()) {
-            Log.e(TAG, "Attempted chunked sending but not properly prepared")
-            return
-        }
-        
-        try {
-            // If we're just starting (no acknowledged chunks), send the initialization command
-            if (acknowledgedChunks.isEmpty()) {
-                if (!initializeChunkedTransfer(isoDep)) {
-                    // If we're already in retry mode, just return and wait for retry timeout
-                    if (isRetryingTransfer) {
-                        return
-                    }
-                    
-                    // If retry timeout is disabled (0), immediately handle error
-                    if (transferRetryTimeoutMs <= 0) {
-                        handleChunkedTransferError("Failed to initialize chunked transfer")
-                        return
-                    }
-                    
-                    // Start retry timeout and wait for reconnection
-                    runOnUiThread {
-                        tvStatus.text = "Failed to initialize transfer. Waiting for reconnection..."
-                    }
-                    startTransferRetryTimeout()
-                    return
-                }
-            }
-            
-            // Send chunks until all are acknowledged or max attempts reached
-            val transferResult = sendAllChunks(isoDep)
-            
-            // If transfer was successful, complete it
-            if (transferResult) {
-                // Cancel the transfer timeout since we're done
-                cancelTransferTimeout()
-                cancelTransferRetryTimeout()
-                isRetryingTransfer = false
-                
-                completeChunkedTransfer(isoDep)
-            } else {
-                // If we're already in retry mode, just return and wait for retry timeout
-                if (isRetryingTransfer) {
-                    return
-                }
-                
-                // If retry timeout is disabled (0), immediately handle error
-                if (transferRetryTimeoutMs <= 0) {
-                    handleChunkedTransferError(getString(R.string.chunked_transfer_incomplete))
-                    return
-                }
-                
-                // Start retry timeout and wait for reconnection
-                runOnUiThread {
-                    tvStatus.text = "Transfer incomplete. Waiting for reconnection..."
-                }
-                startTransferRetryTimeout()
-            }
-        } catch (e: IOException) {
-            // Handle communication errors with retry logic
-            handleTagCommunicationError(e)
-        } catch (e: TagLostException) {
-            // Handle tag lost errors with retry logic
-            handleTagLostError(e)
-        } catch (e: Exception) {
-            // For other exceptions, log and reset if not in retry mode
-            Log.e(TAG, "Error during chunked sending: ${e.message}")
-            
-            // If we're already in retry mode, just return and wait for retry timeout
-            if (isRetryingTransfer) {
-                return
-            }
-            
-            // If retry timeout is disabled (0), immediately handle error
-            if (transferRetryTimeoutMs <= 0) {
-                handleChunkedTransferError(e.message ?: "Unknown error")
-                return
-            }
-            
-            // Start retry timeout and wait for reconnection
-            runOnUiThread {
-                tvStatus.text = "Error during transfer. Waiting for reconnection..."
-            }
-            startTransferRetryTimeout()
-        }
-    }
-    
-    /**
-     * Initialize the chunked transfer by sending the initialization command
-     * @return true if initialization was successful, false otherwise
-     */
-    private fun initializeChunkedTransfer(isoDep: IsoDep): Boolean {
-        // Update state to initializing
-        chunkedTransferState = ChunkedTransferState.INITIALIZING
-        
-        val totalLength = chunksToSend.joinToString("").length
-        val initCommand = NfcProtocol.createChunkInitCommand(totalLength, maxChunkSize, totalChunks)
-        val initResult = isoDep.transceive(initCommand)
-        
-        if (!NfcProtocol.isSuccess(initResult)) {
-            Log.e(TAG, "Failed to initialize chunked transfer")
-            chunkedTransferState = ChunkedTransferState.ERROR
-            return false
-        }
-        
-        // Update UI to show we're starting chunked transfer
-        runOnUiThread {
-            tvStatus.text = getString(R.string.sending_chunk, 0, totalChunks)
-        }
-        
-        // Start the transfer timeout
-        startTransferTimeout()
-        
-        // Update state to sending chunks
-        chunkedTransferState = ChunkedTransferState.SENDING_CHUNKS
-        return true
-    }
-    
-    /**
-     * Send all chunks until all are acknowledged or max attempts reached
-     * @return true if all chunks were acknowledged, false otherwise
-     */
-    private fun sendAllChunks(isoDep: IsoDep): Boolean {
-        var currentAttempt = 0
-        
-        while (currentAttempt < MAX_SEND_ATTEMPTS * totalChunks) {
-            // Find the next chunk to send (either the current one or one that needs retrying)
-            val chunkToSend = findNextChunkToSend()
-            
-            if (chunkToSend == -1) {
-                // All chunks have been acknowledged
-                return acknowledgedChunks.size == totalChunks
-            }
-            
-            // Update UI with current progress
-            runOnUiThread {
-                tvStatus.text = getString(R.string.sending_chunk, acknowledgedChunks.size + 1, totalChunks)
-            }
-            
-            // Send the chunk
-            val chunkData = chunksToSend[chunkToSend]
-            val chunkCommand = NfcProtocol.createChunkDataCommand(chunkToSend, chunkData)
-            val chunkResult = isoDep.transceive(chunkCommand)
-            
-            // Increment attempt counter
-            chunkSendAttempts[chunkToSend] = (chunkSendAttempts[chunkToSend] ?: 0) + 1
-            currentAttempt++
-            
-            if (NfcProtocol.isSuccess(chunkResult)) {
-                // Check if we got an acknowledgment
-                val ackIndex = NfcProtocol.parseChunkAck(chunkResult)
-                
-                if (ackIndex != -1) {
-                    Log.d(TAG, "Chunk $ackIndex acknowledged")
-                    acknowledgedChunks.add(ackIndex)
-                    
-                    // Reset the transfer timeout since we got a response
-                    startTransferTimeout()
-                }
-            }
-            
-            // Small delay between chunks to avoid overwhelming the receiver
-            Thread.sleep(chunkDelay)
-        }
-        
-        // If we get here, we've reached the maximum number of attempts
-        return acknowledgedChunks.size == totalChunks
-    }
-    
-    /**
-     * Complete the chunked transfer by sending the completion command
-     */
-    private fun completeChunkedTransfer(isoDep: IsoDep) {
-        // Update state to completing
-        chunkedTransferState = ChunkedTransferState.COMPLETING
-        
-        val completeCommand = NfcProtocol.createChunkCompleteCommand()
-        val completeResult = isoDep.transceive(completeCommand)
-        
-        if (NfcProtocol.isSuccess(completeResult)) {
-            Log.d(TAG, "Chunked transfer completed successfully")
-            
-            runOnUiThread {
-                tvStatus.text = getString(R.string.chunked_transfer_complete)
-                
-                // Mark the last sent message as delivered
-                val lastPosition = messageAdapter.itemCount - 1
-                messageAdapter.markMessageAsDelivered(lastPosition)
-                
-                // Vibrate on message sent
-                vibrate(200)
-                
-                // Check if we should close the app after sending a shared message
-                if (handlePostSendActions()) {
-                    return@runOnUiThread
-                }
-                
-                // Clear the sent message to prevent re-sending
-                lastSentMessage = ""
-                
-                // Reset chunked send mode
-                resetChunkedSendMode()
-                
-                // Switch to receive mode automatically
-                switchToReceiveMode()
-                scrollToBottom()
-            }
-        } else {
-            Log.e(TAG, "Failed to complete chunked transfer")
-            chunkedTransferState = ChunkedTransferState.ERROR
-            handleChunkedTransferError(getString(R.string.chunked_transfer_failed_message))
-        }
-    }
-    
-    /**
-     * Handle post-send actions like closing the app if needed
-     * @return true if the app is closing, false otherwise
-     */
-    private fun handlePostSendActions(): Boolean {
-        // Check if we should close the app after sending a shared message
-        if (openedViaShareIntent) {
-            val closeAfterSharedSend = dbHelper.getBooleanSetting(
-                SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND, 
-                AppConstants.DefaultSettings.CLOSE_AFTER_SHARED_SEND
-            )
-            
-            if (closeAfterSharedSend) {
-                // Show a toast to inform the user
-                Toast.makeText(this, getString(R.string.message_sent_closing), Toast.LENGTH_SHORT).show()
-                
-                // Close the app after a short delay
-                mainHandler.postDelayed({
-                    finish()
-                }, 1000)
-                return true
-            }
-        }
-        return false
-    }
-    
-    /**
-     * Handle errors during chunked transfer
-     */
-    private fun handleChunkedTransferError(errorMessage: String) {
-        Log.e(TAG, "Chunked transfer error: $errorMessage")
-        chunkedTransferState = ChunkedTransferState.ERROR
-        runOnUiThread {
-            tvStatus.text = getString(R.string.chunked_transfer_failed)
-            Toast.makeText(this, getString(R.string.chunked_transfer_error, errorMessage), Toast.LENGTH_LONG).show()
-            resetChunkedSendMode()
-            // Switch to receive mode to recover from error
-            switchToReceiveMode()
-        }
-    }
-    
-    /**
-     * Find the next chunk that needs to be sent
-     * @return The index of the next chunk to send, or -1 if all chunks have been acknowledged
-     */
-    private fun findNextChunkToSend(): Int {
-        // First, check if there are any chunks that haven't been attempted yet
-        for (i in currentChunkIndex until totalChunks) {
-            if (!acknowledgedChunks.contains(i)) {
-                currentChunkIndex = i
-                return i
-            }
-        }
-        
-        // If all chunks have been attempted at least once, check for any that haven't been acknowledged
-        // and haven't reached the maximum number of attempts
-        for (i in 0 until totalChunks) {
-            if (!acknowledgedChunks.contains(i) && (chunkSendAttempts[i] ?: 0) < MAX_SEND_ATTEMPTS) {
-                return i
-            }
-        }
-        
-        // If we get here, either all chunks have been acknowledged or we've reached the maximum
-        // number of attempts for all chunks
-        return -1
-    }
-    
-    /**
-     * Reset the chunked send mode state
-     */
-    private fun resetChunkedSendMode() {
-        // Cancel any active transfer timeout
-        cancelTransferTimeout()
-        
-        // Cancel any active retry timeout
-        cancelTransferRetryTimeout()
-        isRetryingTransfer = false
-        
-        chunkedTransferState = ChunkedTransferState.IDLE
-        chunksToSend.clear()
-        acknowledgedChunks.clear()
-        chunkSendAttempts.clear()
-        currentChunkIndex = 0
-        totalChunks = 0
-    }
-
-    /**
-     * Scroll to the bottom of the message list
-     */
-    private fun scrollToBottom() {
-        rvMessages.post {
-            val itemCount = messageAdapter.itemCount
-            if (itemCount > 0) {
-                rvMessages.smoothScrollToPosition(itemCount - 1)
-            }
         }
     }
     
@@ -1383,6 +520,7 @@ class MainActivity : Activity(), ReaderCallback {
                             
                             // Store the message to send
                             lastSentMessage = etMessage.text.toString()
+                            transferManager.setLastSentMessage(lastSentMessage)
                             
                             // Add the message to the chat as a sent message and save to database
                             saveAndAddMessage(lastSentMessage, true)
@@ -1391,7 +529,7 @@ class MainActivity : Activity(), ReaderCallback {
                             etMessage.text.clear()
                             
                             // Switch to send mode
-                            switchToSendMode()
+                            transferManager.switchToSendMode()
                         } else {
                             Log.d(TAG, "Text field is empty, not auto-sending")
                         }
@@ -1420,14 +558,13 @@ class MainActivity : Activity(), ReaderCallback {
         mainHandler.postDelayed({
             // Only switch to receive mode if we're not already in send mode
             if (appState != AppState.SENDING) {
-                switchToReceiveMode()
-                
-                // Ensure the CardEmulationService is running
-                val intent = Intent(this, CardEmulationService::class.java)
-                startService(intent)
+                transferManager.switchToReceiveMode()
                 
                 // Set up the data receiver
-                setupDataReceiver()
+                transferManager.setupDataReceiver()
+                
+                // Set the current message for the CardEmulationService
+                transferManager.setCardEmulationMessage(etMessage.text.toString())
             }
         }, 500)
     }
@@ -1459,97 +596,20 @@ class MainActivity : Activity(), ReaderCallback {
      * Load chunked message settings from the database
      */
     private fun loadChunkedMessageSettings() {
-        maxChunkSize = dbHelper.getSetting(
-            SettingsContract.SettingsEntry.KEY_MAX_CHUNK_SIZE,
-            AppConstants.DefaultSettingsStrings.MAX_CHUNK_SIZE
-        ).toInt()
-        
-        chunkDelay = dbHelper.getSetting(
-            SettingsContract.SettingsEntry.KEY_CHUNK_DELAY,
-            AppConstants.DefaultSettingsStrings.CHUNK_DELAY_MS
-        ).toLong()
-        
-        transferRetryTimeoutMs = dbHelper.getSetting(
-            SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS,
-            AppConstants.DefaultSettingsStrings.TRANSFER_RETRY_TIMEOUT_MS
-        ).toLong()
-        
-        Log.d(TAG, "Loaded chunked message settings: maxChunkSize=$maxChunkSize, chunkDelay=$chunkDelay, transferRetryTimeoutMs=$transferRetryTimeoutMs")
-    }
-
-    /**
-     * Send a regular (non-chunked) message
-     */
-    private fun sendRegularMessage(isoDep: IsoDep, message: String) {
-        try {
-            // Create a MessageData object with the message content and a unique ID
-            val messageData = MessageData(message)
-            val jsonMessage = messageData.toJson()
-            
-            val sendCommand = NfcProtocol.createSendDataCommand(jsonMessage)
-            val sendResult = isoDep.transceive(sendCommand)
-            
-            if (NfcProtocol.isSuccess(sendResult)) {
-                // Cancel any retry timeout since we succeeded
-                cancelTransferRetryTimeout()
-                isRetryingTransfer = false
-                
-                runOnUiThread {
-                    tvStatus.text = getString(R.string.message_sent)
-                    
-                    // Mark the last sent message as delivered
-                    val lastPosition = messageAdapter.itemCount - 1
-                    messageAdapter.markMessageAsDelivered(lastPosition)
-                    
-                    // Vibrate on message sent
-                    vibrate(200)
-                    
-                    // Check if we should close the app after sending a shared message
-                    if (handlePostSendActions()) {
-                        return@runOnUiThread
-                    }
-                    
-                    // Clear the sent message to prevent re-sending
-                    lastSentMessage = ""
-                    
-                    // Switch to receive mode automatically
-                    switchToReceiveMode()
-                    scrollToBottom()
-                }
-            } else {
-                // If we're already in retry mode, just log the failure and wait for retry timeout
-                if (isRetryingTransfer) {
-                    Log.e(TAG, "Failed to send message, waiting for retry timeout or reconnection")
-                    return
-                }
-                
-                // If retry timeout is disabled (0), immediately show failure
-                if (transferRetryTimeoutMs <= 0) {
-                    runOnUiThread {
-                        tvStatus.text = getString(R.string.message_send_failed)
-                        // Switch to receive mode to recover from error
-                        switchToReceiveMode()
-                    }
-                    return
-                }
-                
-                // Start retry timeout and wait for reconnection
-                runOnUiThread {
-                    tvStatus.text = "Send failed. Waiting for reconnection..."
-                }
-                startTransferRetryTimeout()
-            }
-        } catch (e: IOException) {
-            // Handle communication errors with retry logic
-            handleTagCommunicationError(e)
-        } catch (e: TagLostException) {
-            // Handle tag lost errors with retry logic
-            handleTagLostError(e)
-        } catch (e: Exception) {
-            // For other exceptions, log and reset
-            Log.e(TAG, "Unexpected error sending message: ${e.message}")
-            resetAndSwitchToReceiveMode("Error: ${e.message}")
-        }
+        transferManager.updateChunkedMessageSettings(
+            dbHelper.getSetting(
+                SettingsContract.SettingsEntry.KEY_MAX_CHUNK_SIZE,
+                AppConstants.DefaultSettingsStrings.MAX_CHUNK_SIZE
+            ).toInt(),
+            dbHelper.getSetting(
+                SettingsContract.SettingsEntry.KEY_CHUNK_DELAY,
+                AppConstants.DefaultSettingsStrings.CHUNK_DELAY_MS
+            ).toLong(),
+            dbHelper.getSetting(
+                SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS,
+                AppConstants.DefaultSettingsStrings.TRANSFER_RETRY_TIMEOUT_MS
+            ).toLong()
+        )
     }
 
     /**
@@ -1576,15 +636,6 @@ class MainActivity : Activity(), ReaderCallback {
         outState.putString("lastReceivedMessageId", lastReceivedMessageId)
         outState.putBoolean("openedViaShareIntent", openedViaShareIntent)
         
-        // Save chunked transfer state
-        outState.putString("chunkedTransferState", chunkedTransferState.name)
-        outState.putInt("currentChunkIndex", currentChunkIndex)
-        outState.putInt("totalChunks", totalChunks)
-        outState.putBoolean("isRetryingTransfer", isRetryingTransfer)
-        
-        // Save acknowledged chunks as an IntArray
-        outState.putIntArray("acknowledgedChunks", acknowledgedChunks.toIntArray())
-        
         Log.d(TAG, "Saved minimal instance state without view hierarchy")
     }
 
@@ -1605,35 +656,11 @@ class MainActivity : Activity(), ReaderCallback {
         lastReceivedMessageId = savedInstanceState.getString("lastReceivedMessageId", "")
         openedViaShareIntent = savedInstanceState.getBoolean("openedViaShareIntent", false)
         
-        // Restore chunked transfer state
-        val savedTransferState = savedInstanceState.getString("chunkedTransferState")
-        if (savedTransferState != null) {
-            try {
-                chunkedTransferState = ChunkedTransferState.valueOf(savedTransferState)
-            } catch (e: IllegalArgumentException) {
-                chunkedTransferState = ChunkedTransferState.IDLE
-            }
-        }
-        
-        currentChunkIndex = savedInstanceState.getInt("currentChunkIndex", 0)
-        totalChunks = savedInstanceState.getInt("totalChunks", 0)
-        isRetryingTransfer = savedInstanceState.getBoolean("isRetryingTransfer", false)
-        
-        // Restore acknowledged chunks
-        val savedAcknowledgedChunks = savedInstanceState.getIntArray("acknowledgedChunks")
-        if (savedAcknowledgedChunks != null) {
-            acknowledgedChunks.clear()
-            acknowledgedChunks.addAll(savedAcknowledgedChunks.toSet())
-        }
-        
         // If we were in the middle of a transfer, reset to receive mode
-        if (chunkedTransferState != ChunkedTransferState.IDLE || appState == AppState.SENDING) {
-            // Reset chunked send mode
-            resetChunkedSendMode()
-            
+        if (appState == AppState.SENDING) {
             // Switch to receive mode
             mainHandler.postDelayed({
-                switchToReceiveMode()
+                transferManager.switchToReceiveMode()
             }, 500)
             
             Log.d(TAG, "Restored from a transfer state, resetting to receive mode")
@@ -1650,4 +677,100 @@ class MainActivity : Activity(), ReaderCallback {
         get() {
             return hasWindowFocus() || (intent?.getBooleanExtra("from_background_receive", false) == true)
         }
+
+    private fun handlePostSendActions(): Boolean {
+        // Check if we should close the app after sending a shared message
+        if (openedViaShareIntent) {
+            val closeAfterSharedSend = dbHelper.getBooleanSetting(
+                SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND, 
+                AppConstants.DefaultSettings.CLOSE_AFTER_SHARED_SEND
+            )
+            
+            if (closeAfterSharedSend) {
+                // Show a toast to inform the user
+                Toast.makeText(this, getString(R.string.message_sent_closing), Toast.LENGTH_SHORT).show()
+                
+                // Close the app after a short delay
+                mainHandler.postDelayed({
+                    finish()
+                }, 1000)
+                return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Scroll to the bottom of the message list
+     */
+    private fun scrollToBottom() {
+        rvMessages.post {
+            val itemCount = messageAdapter.itemCount
+            if (itemCount > 0) {
+                rvMessages.smoothScrollToPosition(itemCount - 1)
+            }
+        }
+    }
+
+    private fun updateModeIndicators() {
+        btnSendMode.isSelected = appState == AppState.SENDING
+    }
+
+    override fun onResume() {
+        super.onResume()
+        
+        // Register for background NFC setting changes
+        val filter = IntentFilter(SettingsActivity.ACTION_BACKGROUND_NFC_SETTING_CHANGED)
+        registerReceiver(settingsChangeReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        
+        // Enable foreground dispatch to intercept all NFC intents
+        enableForegroundDispatch()
+        
+        if (appState == AppState.SENDING || transferManager.isRetryingTransfer()) {
+            transferManager.enableReaderMode()
+        }
+        
+        // Update the service with the latest message if in receive mode
+        if (appState == AppState.RECEIVING) {
+            transferManager.setCardEmulationMessage(etMessage.text.toString())
+            // Re-establish the data receiver connection
+            transferManager.setupDataReceiver()
+        }
+        
+        // Reload chunked message settings in case they were changed
+        loadChunkedMessageSettings()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        
+        // Unregister the receiver
+        try {
+            unregisterReceiver(settingsChangeReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Receiver not registered
+        }
+        
+        // Only disable reader mode if we're not in retry mode
+        if (!transferManager.isRetryingTransfer()) {
+            transferManager.disableReaderMode()
+        }
+        
+        disableForegroundDispatch()
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Clean up database resources
+        messageAdapter.cleanup()
+        dbHelper.close()
+        
+        // Clean up transfer manager resources
+        transferManager.cleanup()
+    }
+
+    override fun onTagDiscovered(tag: Tag) {
+        // Delegate to the transfer manager
+        transferManager.handleTagDiscovered(tag)
+    }
 }
