@@ -175,13 +175,25 @@ class MainActivity : Activity(), ReaderCallback {
         // Check if we're starting with a share intent
         val isShareIntent = intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true
         
+        // Check if we're starting with an NFC intent
+        val isNfcIntent = intent?.action == NfcAdapter.ACTION_TECH_DISCOVERED ||
+                          intent?.action == NfcAdapter.ACTION_TAG_DISCOVERED ||
+                          intent?.action == NfcAdapter.ACTION_NDEF_DISCOVERED
+        
         // Handle incoming share intents first
         if (isShareIntent) {
             handleIncomingShareIntent(intent)
         }
-        
-        // Start in receive mode by default, but only if we're not handling a share intent
-        if (!isShareIntent) {
+        // Handle NFC intents if the app was launched by an NFC discovery
+        else if (isNfcIntent) {
+            Log.d(TAG, "App launched via NFC intent: ${intent?.action}")
+            // Start in receive mode since we were launched by an NFC discovery
+            startInReceiveMode()
+            // Process the NFC intent
+            intent?.let { handleNfcIntent(it) }
+        }
+        // Start in receive mode by default, but only if we're not handling a share or NFC intent
+        else if (!isShareIntent) {
             startInReceiveMode()
         }
         
@@ -401,18 +413,51 @@ class MainActivity : Activity(), ReaderCallback {
             return
         }
         
-        // Handle the NFC intent if we're not in reader mode
-        if (appState != AppState.SENDING && (intent.action == NfcAdapter.ACTION_TECH_DISCOVERED ||
+        // Handle the NFC intent
+        if (intent.action == NfcAdapter.ACTION_TECH_DISCOVERED ||
             intent.action == NfcAdapter.ACTION_TAG_DISCOVERED ||
-            intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED)) {
+            intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) {
             
-            val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
-            tag?.let {
-                // Process the tag if we're not already in reader mode
-                if (appState != AppState.SENDING) {
-                    onTagDiscovered(it)
+            handleNfcIntent(intent)
+        }
+    }
+    
+    /**
+     * Handle NFC intents, whether from foreground dispatch or from app launch
+     */
+    private fun handleNfcIntent(intent: Intent) {
+        Log.d(TAG, "Handling NFC intent: ${intent.action}")
+        
+        // Use the new API for getting parcelable extras if available
+        val tag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
+        }
+        
+        tag?.let {
+            // If we're in send mode, we'll process the tag in onTagDiscovered
+            // If we're not in send mode, process the tag directly
+            if (appState != AppState.SENDING) {
+                // Make sure we're in receive mode
+                if (appState != AppState.RECEIVING) {
+                    switchToReceiveMode()
+                }
+                
+                // Process the tag
+                onTagDiscovered(it)
+                
+                // Vibrate to indicate NFC detection
+                vibrate(100)
+                
+                // Show a toast to indicate the app was launched by NFC
+                if (intent.action != NfcAdapter.ACTION_TECH_DISCOVERED) {
+                    Toast.makeText(this, getString(R.string.app_launched_by_nfc), Toast.LENGTH_SHORT).show()
                 }
             }
+        } ?: run {
+            Log.e(TAG, "No tag found in intent")
         }
     }
     
@@ -1314,6 +1359,13 @@ class MainActivity : Activity(), ReaderCallback {
             // Only switch to receive mode if we're not already in send mode
             if (appState != AppState.SENDING) {
                 switchToReceiveMode()
+                
+                // Ensure the CardEmulationService is running
+                val intent = Intent(this, CardEmulationService::class.java)
+                startService(intent)
+                
+                // Set up the data receiver
+                setupDataReceiver()
             }
         }, 500)
     }

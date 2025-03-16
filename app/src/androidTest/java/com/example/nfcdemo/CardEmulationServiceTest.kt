@@ -19,7 +19,6 @@ class CardEmulationServiceTest {
     @get:Rule
     val serviceRule = ServiceTestRule()
 
-    private lateinit var service: CardEmulationService
     private var dataReceivedFlag = false
     private var receivedData = ""
     private var chunkProgress = Pair(0, 0)
@@ -33,8 +32,14 @@ class CardEmulationServiceTest {
                 ApplicationProvider.getApplicationContext(),
                 CardEmulationService::class.java
             )
-            val binder = serviceRule.bindService(serviceIntent)
-            service = (binder as CardEmulationService.LocalBinder).getService()
+            serviceRule.startService(serviceIntent)
+            
+            // Wait for the service to be created
+            Thread.sleep(500)
+            
+            // Get the service instance
+            val service = CardEmulationService.instance
+            assertNotNull("Service instance should not be null", service)
             
             // Reset test flags
             dataReceivedFlag = false
@@ -43,20 +48,20 @@ class CardEmulationServiceTest {
             chunkError = ""
             
             // Set up listeners
-            service.onDataReceivedListener = { data ->
+            service?.onDataReceivedListener = { data ->
                 dataReceivedFlag = true
-                receivedData = data
+                receivedData = data.content
             }
             
-            service.onChunkProgressListener = { received, total ->
+            service?.onChunkProgressListener = { received, total ->
                 chunkProgress = Pair(received, total)
             }
             
-            service.onChunkErrorListener = { error ->
+            service?.onChunkErrorListener = { error ->
                 chunkError = error
             }
         } catch (e: TimeoutException) {
-            fail("Timed out while binding to CardEmulationService")
+            fail("Timed out while starting CardEmulationService")
         }
     }
 
@@ -75,7 +80,7 @@ class CardEmulationServiceTest {
         )
         
         // Process the command
-        val response = service.processCommandApdu(selectApdu, null)
+        val response = CardEmulationService.instance?.processCommandApdu(selectApdu, null)
         
         // Verify the response (should be SELECT_OK_SW: 9000)
         assertNotNull(response)
@@ -88,13 +93,13 @@ class CardEmulationServiceTest {
     fun testProcessCommandGetData() {
         // Set a message to share
         val testMessage = "Test message"
-        service.messageToShare = testMessage
+        CardEmulationService.instance?.messageToShare = testMessage
         
         // Create a GET_DATA command
         val getDataCommand = "GET_DATA".toByteArray(Charset.forName("UTF-8"))
         
         // Process the command
-        val response = service.processCommandApdu(getDataCommand, null)
+        val response = CardEmulationService.instance?.processCommandApdu(getDataCommand, null)
         
         // Verify the response
         assertNotNull(response)
@@ -119,7 +124,7 @@ class CardEmulationServiceTest {
         val sendDataCommand = "SEND_DATA:$testMessage".toByteArray(Charset.forName("UTF-8"))
         
         // Process the command
-        val response = service.processCommandApdu(sendDataCommand, null)
+        val response = CardEmulationService.instance?.processCommandApdu(sendDataCommand, null)
         
         // Verify the response (should be SELECT_OK_SW: 9000)
         assertNotNull(response)
@@ -141,7 +146,7 @@ class CardEmulationServiceTest {
         val chunkInitCommand = "CHUNK_INIT:$totalLength:$chunkSize:$totalChunks".toByteArray(Charset.forName("UTF-8"))
         
         // Process the command
-        val response = service.processCommandApdu(chunkInitCommand, null)
+        val response = CardEmulationService.instance?.processCommandApdu(chunkInitCommand, null)
         
         // Verify the response (should be SELECT_OK_SW: 9000)
         assertNotNull(response)
@@ -150,7 +155,7 @@ class CardEmulationServiceTest {
         assertEquals(0x00.toByte(), response[1])
         
         // Verify the service is now in chunked receive mode
-        assertTrue(service.isReceivingChunkedMessage())
+        assertTrue(CardEmulationService.instance?.isReceivingChunkedMessage() == true)
     }
     
     @Test
@@ -160,36 +165,36 @@ class CardEmulationServiceTest {
         val chunkSize = 10
         val totalChunks = 2
         val chunkInitCommand = "CHUNK_INIT:$totalLength:$chunkSize:$totalChunks".toByteArray(Charset.forName("UTF-8"))
-        service.processCommandApdu(chunkInitCommand, null)
+        CardEmulationService.instance?.processCommandApdu(chunkInitCommand, null)
         
         // Send first chunk
         val chunk1 = "First chun"
         val chunkDataCommand1 = "CHUNK_DATA:0:$chunk1".toByteArray(Charset.forName("UTF-8"))
-        val response1 = service.processCommandApdu(chunkDataCommand1, null)
+        val response1 = CardEmulationService.instance?.processCommandApdu(chunkDataCommand1, null)
         
         // Verify the response contains the acknowledgment
-        val responseStr1 = String(response1.copyOfRange(0, response1.size - 2), Charset.forName("UTF-8"))
+        val responseStr1 = String(response1?.copyOfRange(0, response1?.size?.minus(2) ?: 0) ?: "", Charset.forName("UTF-8"))
         assertTrue(responseStr1.startsWith("CHUNK_ACK:0"))
         
         // Send second chunk
         val chunk2 = "k message"
         val chunkDataCommand2 = "CHUNK_DATA:1:$chunk2".toByteArray(Charset.forName("UTF-8"))
-        val response2 = service.processCommandApdu(chunkDataCommand2, null)
+        val response2 = CardEmulationService.instance?.processCommandApdu(chunkDataCommand2, null)
         
         // Verify the response contains the acknowledgment
-        val responseStr2 = String(response2.copyOfRange(0, response2.size - 2), Charset.forName("UTF-8"))
+        val responseStr2 = String(response2?.copyOfRange(0, response2?.size?.minus(2) ?: 0) ?: "", Charset.forName("UTF-8"))
         assertTrue(responseStr2.startsWith("CHUNK_ACK:1"))
         
         // Complete the transfer
         val completeCommand = "CHUNK_COMPLETE".toByteArray(Charset.forName("UTF-8"))
-        service.processCommandApdu(completeCommand, null)
+        CardEmulationService.instance?.processCommandApdu(completeCommand, null)
         
         // Verify the data received callback was triggered with the complete message
         assertTrue(dataReceivedFlag)
         assertEquals("$chunk1$chunk2", receivedData)
         
         // Verify the service is no longer in chunked receive mode
-        assertFalse(service.isReceivingChunkedMessage())
+        assertFalse(CardEmulationService.instance?.isReceivingChunkedMessage() == true)
     }
     
     @Test
@@ -198,7 +203,7 @@ class CardEmulationServiceTest {
         val invalidCommand = "INVALID_COMMAND".toByteArray(Charset.forName("UTF-8"))
         
         // Process the command
-        val response = service.processCommandApdu(invalidCommand, null)
+        val response = CardEmulationService.instance?.processCommandApdu(invalidCommand, null)
         
         // Verify the response (should be UNKNOWN_CMD_SW: 0000)
         assertNotNull(response)
@@ -211,15 +216,15 @@ class CardEmulationServiceTest {
     fun testResetChunkedMessageState() {
         // First initialize chunked transfer
         val chunkInitCommand = "CHUNK_INIT:100:20:5".toByteArray(Charset.forName("UTF-8"))
-        service.processCommandApdu(chunkInitCommand, null)
+        CardEmulationService.instance?.processCommandApdu(chunkInitCommand, null)
         
         // Verify the service is in chunked receive mode
-        assertTrue(service.isReceivingChunkedMessage())
+        assertTrue(CardEmulationService.instance?.isReceivingChunkedMessage() == true)
         
         // Reset the chunked message state
-        service.resetChunkedMessageState()
+        CardEmulationService.instance?.resetChunkedMessageState()
         
         // Verify the service is no longer in chunked receive mode
-        assertFalse(service.isReceivingChunkedMessage())
+        assertFalse(CardEmulationService.instance?.isReceivingChunkedMessage() == true)
     }
 } 

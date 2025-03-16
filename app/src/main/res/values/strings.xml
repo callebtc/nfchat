@@ -36,6 +36,7 @@
     <string name="chunked_transfer_error">Error during transfer: %1$s</string>
     <string name="chunked_transfer_error_receiver">Error receiving chunked message: %1$s</string>
     <string name="chunked_transfer_timeout">Transfer timed out. Switching to receive mode.</string>
+    <string name="app_launched_by_nfc">App launched by NFC</string>
     
     <!-- Settings -->
     <string name="settings_title">Settings</string>

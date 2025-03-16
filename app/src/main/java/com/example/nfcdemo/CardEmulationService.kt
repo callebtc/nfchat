@@ -1,7 +1,11 @@
 package com.example.nfcdemo
 
+import android.app.Service
+import android.content.Intent
 import android.nfc.cardemulation.HostApduService
+import android.os.Binder
 import android.os.Bundle
+import android.os.IBinder
 import android.util.Log
 import com.example.nfcdemo.data.AppConstants
 import com.example.nfcdemo.nfc.MessageData
@@ -65,6 +69,12 @@ class CardEmulationService : HostApduService() {
         super.onCreate()
         instance = this
         Log.d(TAG, "CardEmulationService created")
+    }
+    
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "CardEmulationService started with startId: $startId")
+        // If the service is killed, restart it
+        return Service.START_STICKY
     }
     
     override fun onDestroy() {
