@@ -24,6 +24,16 @@ jobs:
         with:
           gradle-version: '8.9'
           gradle-home-cache-cleanup: true
+
+      - name: Clear previous Gradle cache (force Gradle 8.9)
+        run: |
+          rm -rf ~/.gradle/caches
+          rm -rf ~/.gradle/wrapper
+          rm -rf ~/.gradle/daemon
+          rm -rf ~/.gradle/gradle.properties
+          echo "org.gradle.daemon=false" >> gradle.properties
+          echo "Gradle cache cleaned."
+  
       
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
