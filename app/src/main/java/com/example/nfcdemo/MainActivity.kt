@@ -44,6 +44,9 @@ import android.content.BroadcastReceiver
 import com.example.nfcdemo.nfc.ChunkwiseTransferManager
 import com.example.nfcdemo.nfc.ChunkedTransferState
 import com.example.nfcdemo.nfc.TransferManager
+import com.example.nfcdemo.handlers.CashuHandler
+import com.example.nfcdemo.handlers.LinkHandler
+import com.example.nfcdemo.handlers.MessageHandlerManager
 
 /**
  * Enum representing the different states of the app
@@ -101,6 +104,9 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
 
         // Initialize database helper
         dbHelper = MessageDbHelper(this)
+
+        // Initialize message handlers
+        initializeMessageHandlers()
 
         etMessage = findViewById(R.id.etMessage)
         tvStatus = findViewById(R.id.tvStatus)
@@ -183,7 +189,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         }
         // Handle being brought to the foreground from a background message receive
         else if (fromBackgroundReceive) {
-            Log.d(TAG, "App brought to foreground from background message receive")
+            Log.d(TAG, "fromBackgroundReceive: App brought to foreground from background message receive")
             // Make sure we're in receive mode
             intentManager.startInReceiveMode(appState, etMessage)
             // Show a toast to inform the user
@@ -577,5 +583,19 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     override fun onTagDiscovered(tag: Tag) {
         // Delegate to the transfer manager
         transferManager.handleTagDiscovered(tag)
+    }
+
+    /**
+     * Initialize the message handlers
+     */
+    private fun initializeMessageHandlers() {
+        // Clear any existing handlers
+        MessageHandlerManager.clearHandlers()
+        
+        // Register the handlers
+        MessageHandlerManager.registerHandler(LinkHandler())
+        MessageHandlerManager.registerHandler(CashuHandler())
+        
+        Log.d(TAG, "Message handlers initialized")
     }
 }

@@ -10,12 +10,30 @@ import com.example.nfcdemo.WebViewActivityManager
 import com.example.nfcdemo.data.AppConstants
 import com.example.nfcdemo.data.MessageDbHelper
 import com.example.nfcdemo.data.SettingsContract
+import com.example.nfcdemo.handlers.CashuHandler
+import com.example.nfcdemo.handlers.LinkHandler
+import com.example.nfcdemo.handlers.MessageHandlerManager
 
 /**
  * Utility class for processing messages
  */
 object MessageProcessor {
     private const val TAG = "MessageProcessor"
+    private var handlersInitialized = false
+    
+    /**
+     * Initialize the message handlers
+     */
+    private fun initializeHandlers() {
+        if (!handlersInitialized) {
+            // Register the handlers
+            MessageHandlerManager.registerHandler(LinkHandler())
+            MessageHandlerManager.registerHandler(CashuHandler())
+            
+            handlersInitialized = true
+            Log.d(TAG, "Message handlers initialized")
+        }
+    }
     
     /**
      * Process a received message
@@ -31,16 +49,17 @@ object MessageProcessor {
     ): String {
         val messageContent = messageData.content
         
-        // Check if auto-open links is enabled
-        if (dbHelper.getBooleanSetting(SettingsContract.SettingsEntry.KEY_AUTO_OPEN_LINKS, AppConstants.DefaultSettings.AUTO_OPEN_LINKS)) {
-            openLinksInMessage(context, messageContent, dbHelper)
-        }
+        // Initialize handlers if needed
+        initializeHandlers()
+        
+        // Process the message through all registered handlers
+        MessageHandlerManager.processMessage(context, messageContent, dbHelper)
         
         return messageContent
     }
     
     /**
-     * Find and open links in a message
+     * Find and open links in a message (legacy method, kept for backward compatibility)
      * @param context The context
      * @param message The message to process
      * @param dbHelper The database helper
@@ -50,51 +69,25 @@ object MessageProcessor {
         message: String,
         dbHelper: MessageDbHelper
     ) {
-        // Find URLs in the message
-        val matcher = Patterns.WEB_URL.matcher(message)
-        if (matcher.find()) {
-            val url = matcher.group()
-            if (url != null) {
-                // Prepend https:// if the URL doesn't have a scheme
-                val fullUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                    "https://$url"
-                } else {
-                    url
-                }
-                
-                // Open the URL based on settings
-                openUrl(context, fullUrl, dbHelper)
-            }
+        // Initialize handlers if needed
+        initializeHandlers()
+        
+        // Use the LinkHandler directly
+        val linkHandler = LinkHandler()
+        if (linkHandler.isEnabled(dbHelper)) {
+            linkHandler.processMessage(context, message, dbHelper)
         }
     }
     
     /**
-     * Open a URL based on app settings (internal or external browser)
+     * Open a URL based on app settings (legacy method, kept for backward compatibility)
      * @param context The context
      * @param url The URL to open
      * @param dbHelper The database helper for accessing settings
      */
     fun openUrl(context: Context, url: String, dbHelper: MessageDbHelper) {
-        // Check if we should use the internal browser
-        val useInternalBrowser = dbHelper.getBooleanSetting(
-            SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
-            AppConstants.DefaultSettings.USE_INTERNAL_BROWSER
-        )
-        
-        if (useInternalBrowser) {
-            // Use the WebViewActivityManager to load the URL
-            WebViewActivityManager.loadUrl(context, url)
-        } else {
-            // Open in external browser
-            openUrlInExternalBrowser(context, url)
-        }
-    }
-    
-    /**
-     * Open a URL in the external browser
-     */
-    private fun openUrlInExternalBrowser(context: Context, url: String) {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-        context.startActivity(intent)
+        // Use the LinkHandler to open the URL
+        val linkHandler = LinkHandler()
+        linkHandler.openUrl(context, url, dbHelper)
     }
 } 

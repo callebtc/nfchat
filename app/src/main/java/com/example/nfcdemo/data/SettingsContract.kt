@@ -26,5 +26,10 @@ object SettingsContract {
         const val KEY_MAX_CHUNK_SIZE = "max_chunk_size"
         const val KEY_CHUNK_DELAY = "chunk_delay"
         const val KEY_TRANSFER_RETRY_TIMEOUT_MS = "transfer_retry_timeout_ms"
+        
+        // Cashu handler settings
+        const val KEY_ENABLE_CASHU_HANDLER = "enable_cashu_handler"
+        const val KEY_CASHU_URL_PATTERN = "cashu_url_pattern"
+        const val KEY_CASHU_USE_APP = "cashu_use_app"
     }
 } 

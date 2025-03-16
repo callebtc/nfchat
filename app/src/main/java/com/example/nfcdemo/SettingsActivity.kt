@@ -30,10 +30,16 @@ class SettingsActivity : Activity() {
     private lateinit var etTransferRetryTimeoutMs: EditText
     private lateinit var btnBack: ImageView
     
+    // Cashu handler settings
+    private lateinit var cbEnableCashuHandler: CheckBox
+    private lateinit var etCashuUrlPattern: EditText
+    private lateinit var cbCashuUseApp: CheckBox
+    
     // Original values to check if they've changed
     private var originalMaxChunkSize = AppConstants.DefaultSettingsStrings.MAX_CHUNK_SIZE
     private var originalChunkDelay = AppConstants.DefaultSettingsStrings.CHUNK_DELAY_MS
     private var originalTransferRetryTimeoutMs = AppConstants.DefaultSettingsStrings.TRANSFER_RETRY_TIMEOUT_MS
+    private var originalCashuUrlPattern = AppConstants.DefaultSettingsStrings.CASHU_URL_PATTERN
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +59,11 @@ class SettingsActivity : Activity() {
         etMaxChunkSize = findViewById(R.id.etMaxChunkSize)
         etChunkDelay = findViewById(R.id.etChunkDelay)
         etTransferRetryTimeoutMs = findViewById(R.id.etTransferRetryTimeoutMs)
+        
+        // Initialize Cashu handler views
+        cbEnableCashuHandler = findViewById(R.id.cbEnableCashuHandler)
+        etCashuUrlPattern = findViewById(R.id.etCashuUrlPattern)
+        cbCashuUseApp = findViewById(R.id.cbCashuUseApp)
         
         // Load settings
         loadSettings()
@@ -124,6 +135,25 @@ class SettingsActivity : Activity() {
             AppConstants.DefaultSettingsStrings.TRANSFER_RETRY_TIMEOUT_MS
         )
         etTransferRetryTimeoutMs.setText(originalTransferRetryTimeoutMs)
+        
+        // Load Cashu handler settings
+        val enableCashuHandler = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_ENABLE_CASHU_HANDLER, 
+            AppConstants.DefaultSettings.ENABLE_CASHU_HANDLER
+        )
+        cbEnableCashuHandler.isChecked = enableCashuHandler
+        
+        originalCashuUrlPattern = dbHelper.getSetting(
+            SettingsContract.SettingsEntry.KEY_CASHU_URL_PATTERN,
+            AppConstants.DefaultSettingsStrings.CASHU_URL_PATTERN
+        )
+        etCashuUrlPattern.setText(originalCashuUrlPattern)
+        
+        val cashuUseApp = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_CASHU_USE_APP, 
+            AppConstants.DefaultSettings.CASHU_USE_APP
+        )
+        cbCashuUseApp.isChecked = cashuUseApp
     }
     
     private fun setupListeners() {
@@ -131,6 +161,7 @@ class SettingsActivity : Activity() {
         btnBack.setOnClickListener {
             // Validate and save numeric settings before closing
             validateAndSaveNumericSettings()
+            validateAndSaveCashuSettings()
             finish()
         }
         
@@ -184,6 +215,22 @@ class SettingsActivity : Activity() {
                 isChecked
             )
         }
+        
+        // Enable Cashu handler checkbox
+        cbEnableCashuHandler.setOnCheckedChangeListener { _, isChecked ->
+            dbHelper.setBooleanSetting(
+                SettingsContract.SettingsEntry.KEY_ENABLE_CASHU_HANDLER,
+                isChecked
+            )
+        }
+        
+        // Cashu use app checkbox
+        cbCashuUseApp.setOnCheckedChangeListener { _, isChecked ->
+            dbHelper.setBooleanSetting(
+                SettingsContract.SettingsEntry.KEY_CASHU_USE_APP,
+                isChecked
+            )
+        }
     }
     
     /**
@@ -223,6 +270,29 @@ class SettingsActivity : Activity() {
             dbHelper.setSetting(
                 SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS,
                 validTransferRetryTimeout.toString()
+            )
+        }
+    }
+    
+    /**
+     * Validate and save Cashu settings
+     */
+    private fun validateAndSaveCashuSettings() {
+        // Validate and save Cashu URL pattern
+        val cashuUrlPattern = etCashuUrlPattern.text.toString()
+        if (cashuUrlPattern.isNotEmpty() && cashuUrlPattern != originalCashuUrlPattern) {
+            // Ensure the URL pattern contains the {token} placeholder
+            val validUrlPattern = if (cashuUrlPattern.contains("{token}")) {
+                cashuUrlPattern
+            } else {
+                // If no placeholder, append it to the end
+                "$cashuUrlPattern{token}"
+            }
+            
+            Log.d(TAG, "Saving Cashu URL pattern: $validUrlPattern")
+            dbHelper.setSetting(
+                SettingsContract.SettingsEntry.KEY_CASHU_URL_PATTERN,
+                validUrlPattern
             )
         }
     }

@@ -79,6 +79,16 @@
     <string name="setting_chunk_delay_desc">Delay between sending chunks in milliseconds</string>
     <string name="setting_transfer_retry_timeout">Transfer timeout (ms)</string>
     <string name="setting_transfer_retry_timeout_desc">Time to wait for transfer completion and retry after connection loss (0 to disable)</string>
+    
+    <!-- Cashu Handler Settings -->
+    <string name="settings_category_cashu">Cashu Tokens</string>
+    <string name="setting_enable_cashu_handler">Enable Cashu token detection</string>
+    <string name="setting_enable_cashu_handler_desc">When enabled, Cashu tokens in messages will be detected and can be opened</string>
+    <string name="setting_cashu_url_pattern">Cashu URL pattern</string>
+    <string name="setting_cashu_url_pattern_desc">URL pattern to open Cashu tokens. Use {token} as placeholder for the token</string>
+    <string name="setting_cashu_use_app">Open with Cashu app</string>
+    <string name="setting_cashu_use_app_desc">When enabled, Cashu tokens will be opened with a dedicated app instead of a web URL</string>
+    
     <string name="web_view_back">Back</string>
     <string name="web_view_forward">Forward</string>
     <string name="web_view_close">Close</string>
