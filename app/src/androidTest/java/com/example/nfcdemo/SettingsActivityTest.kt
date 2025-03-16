@@ -1,7 +1,7 @@
 package com.example.nfcdemo
 
 import android.content.Context
-import android.widget.Switch
+import android.widget.CheckBox
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.Espresso.onView
@@ -42,10 +42,10 @@ class SettingsActivityTest {
     @Test
     fun testInitialState() {
         // Verify UI elements are displayed
-        onView(withId(R.id.switchAutoOpenLinks)).check(matches(isDisplayed()))
-        onView(withId(R.id.switchUseInternalBrowser)).check(matches(isDisplayed()))
-        onView(withId(R.id.switchAutoSendShared)).check(matches(isDisplayed()))
-        onView(withId(R.id.switchCloseAfterSharedSend)).check(matches(isDisplayed()))
+        onView(withId(R.id.cbAutoOpenLinks)).check(matches(isDisplayed()))
+        onView(withId(R.id.cbUseInternalBrowser)).check(matches(isDisplayed()))
+        onView(withId(R.id.cbAutoSendShared)).check(matches(isDisplayed()))
+        onView(withId(R.id.cbCloseAfterSharedSend)).check(matches(isDisplayed()))
         onView(withId(R.id.btnClearMessages)).check(matches(isDisplayed()))
         onView(withId(R.id.btnAdvancedSettings)).check(matches(isDisplayed()))
     }
@@ -59,7 +59,7 @@ class SettingsActivityTest {
         )
         
         // Toggle the switch
-        onView(withId(R.id.switchAutoOpenLinks)).perform(click())
+        onView(withId(R.id.cbAutoOpenLinks)).perform(click())
         
         // Verify the setting was updated
         val newValue = dbHelper.getBooleanSetting(
@@ -69,7 +69,7 @@ class SettingsActivityTest {
         assertEquals(!initialValue, newValue)
         
         // Toggle back to the original state
-        onView(withId(R.id.switchAutoOpenLinks)).perform(click())
+        onView(withId(R.id.cbAutoOpenLinks)).perform(click())
         
         // Verify the setting was restored
         val finalValue = dbHelper.getBooleanSetting(
@@ -88,7 +88,7 @@ class SettingsActivityTest {
         )
         
         // Toggle the switch
-        onView(withId(R.id.switchUseInternalBrowser)).perform(click())
+        onView(withId(R.id.cbUseInternalBrowser)).perform(click())
         
         // Verify the setting was updated
         val newValue = dbHelper.getBooleanSetting(
@@ -98,7 +98,7 @@ class SettingsActivityTest {
         assertEquals(!initialValue, newValue)
         
         // Toggle back to the original state
-        onView(withId(R.id.switchUseInternalBrowser)).perform(click())
+        onView(withId(R.id.cbUseInternalBrowser)).perform(click())
         
         // Verify the setting was restored
         val finalValue = dbHelper.getBooleanSetting(
@@ -117,7 +117,7 @@ class SettingsActivityTest {
         )
         
         // Toggle the switch
-        onView(withId(R.id.switchAutoSendShared)).perform(click())
+        onView(withId(R.id.cbAutoSendShared)).perform(click())
         
         // Verify the setting was updated
         val newValue = dbHelper.getBooleanSetting(
@@ -127,7 +127,7 @@ class SettingsActivityTest {
         assertEquals(!initialValue, newValue)
         
         // Toggle back to the original state
-        onView(withId(R.id.switchAutoSendShared)).perform(click())
+        onView(withId(R.id.cbAutoSendShared)).perform(click())
         
         // Verify the setting was restored
         val finalValue = dbHelper.getBooleanSetting(
@@ -146,7 +146,7 @@ class SettingsActivityTest {
         )
         
         // Toggle the switch
-        onView(withId(R.id.switchCloseAfterSharedSend)).perform(click())
+        onView(withId(R.id.cbCloseAfterSharedSend)).perform(click())
         
         // Verify the setting was updated
         val newValue = dbHelper.getBooleanSetting(
@@ -156,7 +156,7 @@ class SettingsActivityTest {
         assertEquals(!initialValue, newValue)
         
         // Toggle back to the original state
-        onView(withId(R.id.switchCloseAfterSharedSend)).perform(click())
+        onView(withId(R.id.cbCloseAfterSharedSend)).perform(click())
         
         // Verify the setting was restored
         val finalValue = dbHelper.getBooleanSetting(
@@ -217,8 +217,8 @@ class SettingsActivityTest {
         
         // Verify the switches reflect the saved settings
         activityScenario.onActivity { activity ->
-            val switchAutoOpenLinks = activity.findViewById<Switch>(R.id.switchAutoOpenLinks)
-            val switchUseInternalBrowser = activity.findViewById<Switch>(R.id.switchUseInternalBrowser)
+            val switchAutoOpenLinks = activity.findViewById<CheckBox>(R.id.cbAutoOpenLinks)
+            val switchUseInternalBrowser = activity.findViewById<CheckBox>(R.id.cbUseInternalBrowser)
             
             assertFalse(switchAutoOpenLinks.isChecked)
             assertTrue(switchUseInternalBrowser.isChecked)

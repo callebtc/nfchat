@@ -33,8 +33,9 @@ import java.util.UUID
 class MessageAdapter(private val context: Context) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
-        private const val VIEW_TYPE_SENT = 1
-        private const val VIEW_TYPE_RECEIVED = 2
+        // Make these public for testing
+        const val VIEW_TYPE_SENT = 1
+        const val VIEW_TYPE_RECEIVED = 2
         
         // Configurable message length limit before truncation
         private var MESSAGE_LENGTH_LIMIT = 200
@@ -356,5 +357,25 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
     // Clean up database resources when adapter is no longer needed
     fun cleanup() {
         dbHelper.close()
+    }
+
+    // Method to get a message at a specific position (for testing)
+    fun getItem(position: Int): Message {
+        return messages[position]
+    }
+    
+    // Method to get the display text for a message (for testing)
+    fun getDisplayText(message: Message): String {
+        val fullText = message.content
+        
+        // If message is already expanded or shorter than limit, return the full text
+        if (message.isExpanded || fullText.length <= MESSAGE_LENGTH_LIMIT) {
+            return fullText
+        }
+        
+        // Create truncated text with "show more" suffix
+        val truncatedText = fullText.substring(0, MESSAGE_LENGTH_LIMIT) + "... "
+        val showMoreText = context.getString(R.string.show_more)
+        return truncatedText + showMoreText
     }
 } 

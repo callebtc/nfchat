@@ -84,9 +84,11 @@ class CardEmulationServiceTest {
         
         // Verify the response (should be SELECT_OK_SW: 9000)
         assertNotNull(response)
-        assertEquals(2, response.size)
-        assertEquals(0x90.toByte(), response[0])
-        assertEquals(0x00.toByte(), response[1])
+        response?.let {
+            assertEquals(2, it.size)
+            assertEquals(0x90.toByte(), it[0])
+            assertEquals(0x00.toByte(), it[1])
+        }
     }
     
     @Test
@@ -103,18 +105,20 @@ class CardEmulationServiceTest {
         
         // Verify the response
         assertNotNull(response)
-        assertTrue(response.size > 2) // Should contain data + status word
-        
-        // Extract the data (remove the status word)
-        val dataBytes = response.copyOfRange(0, response.size - 2)
-        val responseMessage = String(dataBytes, Charset.forName("UTF-8"))
-        
-        // Verify the message
-        assertEquals(testMessage, responseMessage)
-        
-        // Verify the status word (should be SELECT_OK_SW: 9000)
-        assertEquals(0x90.toByte(), response[response.size - 2])
-        assertEquals(0x00.toByte(), response[response.size - 1])
+        response?.let {
+            assertTrue(it.size > 2) // Should contain data + status word
+            
+            // Extract the data (remove the status word)
+            val dataBytes = it.copyOfRange(0, it.size - 2)
+            val responseMessage = String(dataBytes, Charset.forName("UTF-8"))
+            
+            // Verify the message
+            assertEquals(testMessage, responseMessage)
+            
+            // Verify the status word (should be SELECT_OK_SW: 9000)
+            assertEquals(0x90.toByte(), it[it.size - 2])
+            assertEquals(0x00.toByte(), it[it.size - 1])
+        }
     }
     
     @Test
@@ -128,9 +132,11 @@ class CardEmulationServiceTest {
         
         // Verify the response (should be SELECT_OK_SW: 9000)
         assertNotNull(response)
-        assertEquals(2, response.size)
-        assertEquals(0x90.toByte(), response[0])
-        assertEquals(0x00.toByte(), response[1])
+        response?.let {
+            assertEquals(2, it.size)
+            assertEquals(0x90.toByte(), it[0])
+            assertEquals(0x00.toByte(), it[1])
+        }
         
         // Verify the data received callback was triggered
         assertTrue(dataReceivedFlag)
@@ -150,9 +156,11 @@ class CardEmulationServiceTest {
         
         // Verify the response (should be SELECT_OK_SW: 9000)
         assertNotNull(response)
-        assertEquals(2, response.size)
-        assertEquals(0x90.toByte(), response[0])
-        assertEquals(0x00.toByte(), response[1])
+        response?.let {
+            assertEquals(2, it.size)
+            assertEquals(0x90.toByte(), it[0])
+            assertEquals(0x00.toByte(), it[1])
+        }
         
         // Verify the service is now in chunked receive mode
         assertTrue(CardEmulationService.instance?.isReceivingChunkedMessage() == true)
@@ -173,7 +181,11 @@ class CardEmulationServiceTest {
         val response1 = CardEmulationService.instance?.processCommandApdu(chunkDataCommand1, null)
         
         // Verify the response contains the acknowledgment
-        val responseStr1 = String(response1?.copyOfRange(0, response1?.size?.minus(2) ?: 0) ?: "", Charset.forName("UTF-8"))
+        val responseStr1 = if (response1 != null) {
+            String(response1.copyOfRange(0, response1.size - 2), Charset.forName("UTF-8"))
+        } else {
+            ""
+        }
         assertTrue(responseStr1.startsWith("CHUNK_ACK:0"))
         
         // Send second chunk
@@ -182,7 +194,11 @@ class CardEmulationServiceTest {
         val response2 = CardEmulationService.instance?.processCommandApdu(chunkDataCommand2, null)
         
         // Verify the response contains the acknowledgment
-        val responseStr2 = String(response2?.copyOfRange(0, response2?.size?.minus(2) ?: 0) ?: "", Charset.forName("UTF-8"))
+        val responseStr2 = if (response2 != null) {
+            String(response2.copyOfRange(0, response2.size - 2), Charset.forName("UTF-8"))
+        } else {
+            ""
+        }
         assertTrue(responseStr2.startsWith("CHUNK_ACK:1"))
         
         // Complete the transfer
@@ -207,9 +223,11 @@ class CardEmulationServiceTest {
         
         // Verify the response (should be UNKNOWN_CMD_SW: 0000)
         assertNotNull(response)
-        assertEquals(2, response.size)
-        assertEquals(0x00.toByte(), response[0])
-        assertEquals(0x00.toByte(), response[1])
+        response?.let {
+            assertEquals(2, it.size)
+            assertEquals(0x00.toByte(), it[0])
+            assertEquals(0x00.toByte(), it[1])
+        }
     }
     
     @Test
