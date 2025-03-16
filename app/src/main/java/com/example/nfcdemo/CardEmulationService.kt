@@ -75,13 +75,14 @@ class CardEmulationService : HostApduService() {
     override fun onDeactivated(reason: Int) {
         Log.d(TAG, "Deactivated: $reason")
         
-        // If we were in the middle of a chunked transfer, reset the state
+        // If we were in the middle of a chunked transfer, don't reset the state immediately
+        // This allows the transfer to continue if the connection is restored
         if (isReceivingChunkedMessage) {
-            Log.d(TAG, "Chunked transfer interrupted")
-            resetChunkedMessageState()
+            Log.d(TAG, "Chunked transfer interrupted, but keeping state for possible reconnection")
             
-            // Notify MainActivity about the interruption
-            onChunkErrorListener?.invoke("Connection lost during chunked transfer")
+            // Notify MainActivity about the interruption, but don't reset state
+            // The MainActivity will handle the timeout and reset if needed
+            onChunkProgressListener?.invoke(receivedChunks, totalChunks)
         }
     }
     

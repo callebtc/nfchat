@@ -22,12 +22,14 @@ class SettingsActivity : Activity() {
     private lateinit var etMaxChunkSize: EditText
     private lateinit var etChunkDelay: EditText
     private lateinit var etTransferTimeout: EditText
+    private lateinit var etTransferRetryTimeoutMs: EditText
     private lateinit var btnBack: ImageView
     
     // Original values to check if they've changed
     private var originalMaxChunkSize = "500"
     private var originalChunkDelay = "200"
     private var originalTransferTimeout = "2"
+    private var originalTransferRetryTimeoutMs = "5000"
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,6 +46,7 @@ class SettingsActivity : Activity() {
         etMaxChunkSize = findViewById(R.id.etMaxChunkSize)
         etChunkDelay = findViewById(R.id.etChunkDelay)
         etTransferTimeout = findViewById(R.id.etTransferTimeout)
+        etTransferRetryTimeoutMs = findViewById(R.id.etTransferRetryTimeoutMs)
         btnBack = findViewById(R.id.btnBack)
         
         // Load current settings
@@ -102,6 +105,13 @@ class SettingsActivity : Activity() {
             "2"
         )
         etTransferTimeout.setText(originalTransferTimeout)
+        
+        // Load transfer retry timeout setting
+        originalTransferRetryTimeoutMs = dbHelper.getSetting(
+            SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS,
+            "5000"
+        )
+        etTransferRetryTimeoutMs.setText(originalTransferRetryTimeoutMs)
     }
     
     private fun setupListeners() {
@@ -182,6 +192,18 @@ class SettingsActivity : Activity() {
             dbHelper.setSetting(
                 SettingsContract.SettingsEntry.KEY_TRANSFER_TIMEOUT,
                 validTransferTimeout.toString()
+            )
+        }
+        
+        // Validate and save transfer retry timeout
+        val transferRetryTimeoutStr = etTransferRetryTimeoutMs.text.toString()
+        if (transferRetryTimeoutStr.isNotEmpty() && transferRetryTimeoutStr != originalTransferRetryTimeoutMs) {
+            val transferRetryTimeout = transferRetryTimeoutStr.toIntOrNull() ?: 5000
+            val validTransferRetryTimeout = maxOf(transferRetryTimeout, 0) // Can be 0 to disable
+            Log.d(TAG, "Saving transfer retry timeout: $validTransferRetryTimeout")
+            dbHelper.setSetting(
+                SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS,
+                validTransferRetryTimeout.toString()
             )
         }
     }

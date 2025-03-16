@@ -105,6 +105,13 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
             put(SettingsContract.SettingsEntry.COLUMN_VALUE, "2")
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, transferTimeoutValues)
+        
+        // Default transfer retry timeout is 5000 milliseconds (5 seconds)
+        val transferRetryTimeoutValues = ContentValues().apply {
+            put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS)
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, "5000")
+        }
+        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, transferRetryTimeoutValues)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {

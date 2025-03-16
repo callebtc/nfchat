@@ -98,6 +98,7 @@ class MainActivity : Activity(), ReaderCallback {
     private var maxChunkSize = 500
     private var chunkDelay = 200L
     private var transferTimeout = 2 // in seconds
+    private var transferRetryTimeoutMs = 5000L // in milliseconds
     private var acknowledgedChunks = mutableSetOf<Int>()
     private var chunkSendAttempts = mutableMapOf<Int, Int>()
     private val MAX_SEND_ATTEMPTS = 3
@@ -105,6 +106,11 @@ class MainActivity : Activity(), ReaderCallback {
     // Transfer timeout handler
     private var transferTimeoutHandler: Handler? = null
     private var transferTimeoutRunnable: Runnable? = null
+    
+    // Transfer retry timeout handler
+    private var transferRetryTimeoutHandler: Handler? = null
+    private var transferRetryTimeoutRunnable: Runnable? = null
+    private var isRetryingTransfer = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -576,7 +582,7 @@ class MainActivity : Activity(), ReaderCallback {
         // Enable foreground dispatch to intercept all NFC intents
         enableForegroundDispatch()
         
-        if (appState == AppState.SENDING) {
+        if (appState == AppState.SENDING || isRetryingTransfer) {
             enableReaderMode()
         }
         
@@ -593,7 +599,12 @@ class MainActivity : Activity(), ReaderCallback {
 
     override fun onPause() {
         super.onPause()
-        disableReaderMode()
+        
+        // Only disable reader mode if we're not in retry mode
+        if (!isRetryingTransfer) {
+            disableReaderMode()
+        }
+        
         disableForegroundDispatch()
     }
     
@@ -602,6 +613,11 @@ class MainActivity : Activity(), ReaderCallback {
         // Clean up database resources
         messageAdapter.cleanup()
         dbHelper.close()
+        
+        // Cancel any active timeouts
+        cancelTransferTimeout()
+        cancelTransferRetryTimeout()
+        
         // If we're not in receive mode anymore, stop the service
         if (appState != AppState.RECEIVING) {
             val intent = Intent(this, CardEmulationService::class.java)
@@ -626,6 +642,15 @@ class MainActivity : Activity(), ReaderCallback {
         try {
             isoDep.connect()
             Log.d(TAG, "Connected to tag")
+            
+            // If we were in retry mode, cancel the retry timeout
+            if (isRetryingTransfer) {
+                cancelTransferRetryTimeout()
+                isRetryingTransfer = false
+                runOnUiThread {
+                    tvStatus.text = "Connection restored. Continuing transfer..."
+                }
+            }
             
             // Select our AID
             val selectApdu = NfcProtocol.buildSelectApdu(NfcProtocol.DEFAULT_AID)
@@ -720,17 +745,25 @@ class MainActivity : Activity(), ReaderCallback {
      */
     private fun handleTagCommunicationError(e: IOException) {
         Log.e(TAG, "Error communicating with tag: ${e.message}")
-        runOnUiThread {
-            tvStatus.text = "Communication error: ${e.message}"
-            
-            // If we were in chunked send mode, show a more specific error message
-            if (chunkedTransferState == ChunkedTransferState.SENDING_CHUNKS) {
-                Toast.makeText(this, getString(R.string.chunked_transfer_error, e.message), Toast.LENGTH_LONG).show()
-                resetChunkedSendMode()
-                // Switch to receive mode to recover from error
-                switchToReceiveMode()
-            }
+        
+        // If retry timeout is disabled (0), immediately reset
+        if (transferRetryTimeoutMs <= 0) {
+            resetAndSwitchToReceiveMode("Communication error: ${e.message}")
+            return
         }
+        
+        // If we're already retrying, don't start another retry timer
+        if (isRetryingTransfer) {
+            return
+        }
+        
+        // Update UI to show we're waiting for reconnection
+        runOnUiThread {
+            tvStatus.text = "Connection lost. Waiting for reconnection..."
+        }
+        
+        // Start retry timeout
+        startTransferRetryTimeout()
     }
     
     /**
@@ -738,16 +771,91 @@ class MainActivity : Activity(), ReaderCallback {
      */
     private fun handleTagLostError(e: TagLostException) {
         Log.e(TAG, "Tag lost: ${e.message}")
+        
+        // If retry timeout is disabled (0), immediately reset
+        if (transferRetryTimeoutMs <= 0) {
+            resetAndSwitchToReceiveMode("Tag connection lost. Try again.")
+            return
+        }
+        
+        // If we're already retrying, don't start another retry timer
+        if (isRetryingTransfer) {
+            return
+        }
+        
+        // Update UI to show we're waiting for reconnection
         runOnUiThread {
-            tvStatus.text = "Tag connection lost. Try again."
+            tvStatus.text = "Tag connection lost. Waiting for reconnection..."
+        }
+        
+        // Start retry timeout
+        startTransferRetryTimeout()
+    }
+    
+    /**
+     * Start a timeout for transfer retry
+     * After this timeout, we'll give up and switch to receive mode
+     */
+    private fun startTransferRetryTimeout() {
+        // Mark that we're in retry mode
+        isRetryingTransfer = true
+        
+        // Cancel any existing retry timeout
+        cancelTransferRetryTimeout()
+        
+        // Create a new timeout handler if needed
+        if (transferRetryTimeoutHandler == null) {
+            transferRetryTimeoutHandler = Handler(Looper.getMainLooper())
+        }
+        
+        // Create a new timeout runnable
+        transferRetryTimeoutRunnable = Runnable {
+            Log.e(TAG, "Transfer retry timeout occurred")
+            
+            // Reset retry flag
+            isRetryingTransfer = false
+            
+            // Reset and switch to receive mode
+            resetAndSwitchToReceiveMode("Connection not restored. Switching to receive mode.")
+        }
+        
+        // Schedule the timeout
+        transferRetryTimeoutHandler?.postDelayed(transferRetryTimeoutRunnable!!, transferRetryTimeoutMs)
+    }
+    
+    /**
+     * Cancel any active transfer retry timeout
+     */
+    private fun cancelTransferRetryTimeout() {
+        transferRetryTimeoutRunnable?.let {
+            transferRetryTimeoutHandler?.removeCallbacks(it)
+            transferRetryTimeoutRunnable = null
+        }
+    }
+    
+    /**
+     * Reset all transfer state and switch to receive mode with a status message
+     */
+    private fun resetAndSwitchToReceiveMode(statusMessage: String) {
+        // Cancel any active timeouts
+        cancelTransferTimeout()
+        cancelTransferRetryTimeout()
+        
+        runOnUiThread {
+            // Update status
+            tvStatus.text = statusMessage
             
             // If we were in chunked send mode, show a more specific error message
             if (chunkedTransferState == ChunkedTransferState.SENDING_CHUNKS) {
                 Toast.makeText(this, getString(R.string.chunked_transfer_error, "Connection lost"), Toast.LENGTH_LONG).show()
                 resetChunkedSendMode()
-                // Switch to receive mode to recover from error
-                switchToReceiveMode()
             }
+            
+            // Reset retry flag
+            isRetryingTransfer = false
+            
+            // Switch to receive mode to recover from error
+            switchToReceiveMode()
         }
     }
     
@@ -794,7 +902,22 @@ class MainActivity : Activity(), ReaderCallback {
             // If we're just starting (no acknowledged chunks), send the initialization command
             if (acknowledgedChunks.isEmpty()) {
                 if (!initializeChunkedTransfer(isoDep)) {
-                    handleChunkedTransferError("Failed to initialize chunked transfer")
+                    // If we're already in retry mode, just return and wait for retry timeout
+                    if (isRetryingTransfer) {
+                        return
+                    }
+                    
+                    // If retry timeout is disabled (0), immediately handle error
+                    if (transferRetryTimeoutMs <= 0) {
+                        handleChunkedTransferError("Failed to initialize chunked transfer")
+                        return
+                    }
+                    
+                    // Start retry timeout and wait for reconnection
+                    runOnUiThread {
+                        tvStatus.text = "Failed to initialize transfer. Waiting for reconnection..."
+                    }
+                    startTransferRetryTimeout()
                     return
                 }
             }
@@ -802,21 +925,58 @@ class MainActivity : Activity(), ReaderCallback {
             // Send chunks until all are acknowledged or max attempts reached
             val transferResult = sendAllChunks(isoDep)
             
-            // Cancel the transfer timeout since we're done
-            cancelTransferTimeout()
-            
-            // Handle the result of the transfer
+            // If transfer was successful, complete it
             if (transferResult) {
+                // Cancel the transfer timeout since we're done
+                cancelTransferTimeout()
+                cancelTransferRetryTimeout()
+                isRetryingTransfer = false
+                
                 completeChunkedTransfer(isoDep)
             } else {
-                handleChunkedTransferError(getString(R.string.chunked_transfer_incomplete))
+                // If we're already in retry mode, just return and wait for retry timeout
+                if (isRetryingTransfer) {
+                    return
+                }
+                
+                // If retry timeout is disabled (0), immediately handle error
+                if (transferRetryTimeoutMs <= 0) {
+                    handleChunkedTransferError(getString(R.string.chunked_transfer_incomplete))
+                    return
+                }
+                
+                // Start retry timeout and wait for reconnection
+                runOnUiThread {
+                    tvStatus.text = "Transfer incomplete. Waiting for reconnection..."
+                }
+                startTransferRetryTimeout()
             }
+        } catch (e: IOException) {
+            // Handle communication errors with retry logic
+            handleTagCommunicationError(e)
+        } catch (e: TagLostException) {
+            // Handle tag lost errors with retry logic
+            handleTagLostError(e)
         } catch (e: Exception) {
-            // Cancel the transfer timeout
-            cancelTransferTimeout()
-            
+            // For other exceptions, log and reset if not in retry mode
             Log.e(TAG, "Error during chunked sending: ${e.message}")
-            handleChunkedTransferError(e.message ?: "Unknown error")
+            
+            // If we're already in retry mode, just return and wait for retry timeout
+            if (isRetryingTransfer) {
+                return
+            }
+            
+            // If retry timeout is disabled (0), immediately handle error
+            if (transferRetryTimeoutMs <= 0) {
+                handleChunkedTransferError(e.message ?: "Unknown error")
+                return
+            }
+            
+            // Start retry timeout and wait for reconnection
+            runOnUiThread {
+                tvStatus.text = "Error during transfer. Waiting for reconnection..."
+            }
+            startTransferRetryTimeout()
         }
     }
     
@@ -1021,6 +1181,10 @@ class MainActivity : Activity(), ReaderCallback {
         // Cancel any active transfer timeout
         cancelTransferTimeout()
         
+        // Cancel any active retry timeout
+        cancelTransferRetryTimeout()
+        isRetryingTransfer = false
+        
         chunkedTransferState = ChunkedTransferState.IDLE
         chunksToSend.clear()
         acknowledgedChunks.clear()
@@ -1186,49 +1350,86 @@ class MainActivity : Activity(), ReaderCallback {
             "2"
         ).toInt()
         
-        Log.d(TAG, "Loaded chunked message settings: maxChunkSize=$maxChunkSize, chunkDelay=$chunkDelay, transferTimeout=$transferTimeout")
+        transferRetryTimeoutMs = dbHelper.getSetting(
+            SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS,
+            "5000"
+        ).toLong()
+        
+        Log.d(TAG, "Loaded chunked message settings: maxChunkSize=$maxChunkSize, chunkDelay=$chunkDelay, transferTimeout=$transferTimeout, transferRetryTimeoutMs=$transferRetryTimeoutMs")
     }
 
     /**
      * Send a regular (non-chunked) message
      */
     private fun sendRegularMessage(isoDep: IsoDep, message: String) {
-        // Create a MessageData object with the message content and a unique ID
-        val messageData = MessageData(message)
-        val jsonMessage = messageData.toJson()
-        
-        val sendCommand = NfcProtocol.createSendDataCommand(jsonMessage)
-        val sendResult = isoDep.transceive(sendCommand)
-        
-        if (NfcProtocol.isSuccess(sendResult)) {
-            runOnUiThread {
-                tvStatus.text = getString(R.string.message_sent)
+        try {
+            // Create a MessageData object with the message content and a unique ID
+            val messageData = MessageData(message)
+            val jsonMessage = messageData.toJson()
+            
+            val sendCommand = NfcProtocol.createSendDataCommand(jsonMessage)
+            val sendResult = isoDep.transceive(sendCommand)
+            
+            if (NfcProtocol.isSuccess(sendResult)) {
+                // Cancel any retry timeout since we succeeded
+                cancelTransferRetryTimeout()
+                isRetryingTransfer = false
                 
-                // Mark the last sent message as delivered
-                val lastPosition = messageAdapter.itemCount - 1
-                messageAdapter.markMessageAsDelivered(lastPosition)
-                
-                // Vibrate on message sent
-                vibrate(200)
-                
-                // Check if we should close the app after sending a shared message
-                if (handlePostSendActions()) {
-                    return@runOnUiThread
+                runOnUiThread {
+                    tvStatus.text = getString(R.string.message_sent)
+                    
+                    // Mark the last sent message as delivered
+                    val lastPosition = messageAdapter.itemCount - 1
+                    messageAdapter.markMessageAsDelivered(lastPosition)
+                    
+                    // Vibrate on message sent
+                    vibrate(200)
+                    
+                    // Check if we should close the app after sending a shared message
+                    if (handlePostSendActions()) {
+                        return@runOnUiThread
+                    }
+                    
+                    // Clear the sent message to prevent re-sending
+                    lastSentMessage = ""
+                    
+                    // Switch to receive mode automatically
+                    switchToReceiveMode()
+                    scrollToBottom()
+                }
+            } else {
+                // If we're already in retry mode, just log the failure and wait for retry timeout
+                if (isRetryingTransfer) {
+                    Log.e(TAG, "Failed to send message, waiting for retry timeout or reconnection")
+                    return
                 }
                 
-                // Clear the sent message to prevent re-sending
-                lastSentMessage = ""
+                // If retry timeout is disabled (0), immediately show failure
+                if (transferRetryTimeoutMs <= 0) {
+                    runOnUiThread {
+                        tvStatus.text = getString(R.string.message_send_failed)
+                        // Switch to receive mode to recover from error
+                        switchToReceiveMode()
+                    }
+                    return
+                }
                 
-                // Switch to receive mode automatically
-                switchToReceiveMode()
-                scrollToBottom()
+                // Start retry timeout and wait for reconnection
+                runOnUiThread {
+                    tvStatus.text = "Send failed. Waiting for reconnection..."
+                }
+                startTransferRetryTimeout()
             }
-        } else {
-            runOnUiThread {
-                tvStatus.text = getString(R.string.message_send_failed)
-                // Switch to receive mode to recover from error
-                switchToReceiveMode()
-            }
+        } catch (e: IOException) {
+            // Handle communication errors with retry logic
+            handleTagCommunicationError(e)
+        } catch (e: TagLostException) {
+            // Handle tag lost errors with retry logic
+            handleTagLostError(e)
+        } catch (e: Exception) {
+            // For other exceptions, log and reset
+            Log.e(TAG, "Unexpected error sending message: ${e.message}")
+            resetAndSwitchToReceiveMode("Error: ${e.message}")
         }
     }
 }
