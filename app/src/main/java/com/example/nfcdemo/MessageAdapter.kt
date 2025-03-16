@@ -243,10 +243,11 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         return position
     }
 
-    fun addReceivedMessage(message: String) {
-        if (message.isBlank()) return
+    fun addReceivedMessage(message: String): Int {
+        if (message.isBlank()) return -1
         
         val newMessage = Message(message, false, false, Date())
+        val position = messages.size
         
         // Save to database first
         val id = dbHelper.insertMessage(newMessage)
@@ -254,7 +255,8 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         
         // Add to in-memory list
         messages.add(newMessage)
-        notifyItemInserted(messages.size - 1)
+        notifyItemInserted(position)
+        return position
     }
 
     fun markMessageAsDelivered(position: Int) {

@@ -1,7 +1,10 @@
 package com.example.nfcdemo
 
+import android.app.ActivityManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.nfc.cardemulation.HostApduService
 import android.os.Binder
 import android.os.Bundle
@@ -19,6 +22,7 @@ class CardEmulationService : HostApduService() {
     
     companion object {
         private const val TAG = "CardEmulationService"
+        private const val STATUS_FAILED = "6F00" // Status word for command failure
         
         // AID for our service
         private val AID = NfcProtocol.hexStringToByteArray(NfcProtocol.DEFAULT_AID)
@@ -100,8 +104,21 @@ class CardEmulationService : HostApduService() {
     }
     
     override fun processCommandApdu(commandApdu: ByteArray, extras: Bundle?): ByteArray {
-        Log.d(TAG, "Received APDU: ${commandApdu.toHex()}")
-        
+        Log.d(TAG, "Received APDU: ${NfcProtocol.byteArrayToHex(commandApdu)}")
+
+        // Check if background NFC is enabled
+        val dbHelper = MessageDbHelper(this)
+        val backgroundNfcEnabled = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_ENABLE_BACKGROUND_NFC,
+            true
+        )
+
+        // If the app is not in foreground and background NFC is disabled, return error
+        if (!isAppInForeground() && !backgroundNfcEnabled) {
+            Log.d(TAG, "Background NFC is disabled, ignoring command")
+            return NfcProtocol.hexStringToByteArray(STATUS_FAILED)
+        }
+
         // Check if this is a SELECT AID command
         if (isSelectAidCommand(commandApdu)) {
             Log.d(TAG, "Received SELECT AID command")
@@ -390,5 +407,22 @@ class CardEmulationService : HostApduService() {
      */
     private fun ByteArray.toHex(): String {
         return NfcProtocol.byteArrayToHex(this)
+    }
+
+    /**
+     * Check if the app is in foreground
+     */
+    private fun isAppInForeground(): Boolean {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val appProcesses = activityManager.runningAppProcesses ?: return false
+        
+        val packageName = packageName
+        for (appProcess in appProcesses) {
+            if (appProcess.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND 
+                && appProcess.processName == packageName) {
+                return true
+            }
+        }
+        return false
     }
 } 

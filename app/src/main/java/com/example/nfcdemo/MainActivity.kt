@@ -40,6 +40,7 @@ import java.util.UUID
 import com.example.nfcdemo.nfc.MessageData
 import com.example.nfcdemo.nfc.MessageProcessor
 import com.example.nfcdemo.nfc.NfcProtocol
+import android.content.BroadcastReceiver
 
 /**
  * Enum representing the different states of the app
@@ -111,6 +112,16 @@ class MainActivity : Activity(), ReaderCallback {
     private var transferRetryTimeoutHandler: Handler? = null
     private var transferRetryTimeoutRunnable: Runnable? = null
     private var isRetryingTransfer = false
+
+    private var backgroundNfcEnabled = true
+    private val settingsChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == SettingsActivity.ACTION_BACKGROUND_NFC_SETTING_CHANGED) {
+                backgroundNfcEnabled = intent.getBooleanExtra(SettingsActivity.EXTRA_BACKGROUND_NFC_ENABLED, true)
+                Log.d(TAG, "Background NFC setting changed: enabled=$backgroundNfcEnabled")
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -212,6 +223,13 @@ class MainActivity : Activity(), ReaderCallback {
         if (savedInstanceState != null) {
             restoreAppState(savedInstanceState)
         }
+
+        // Initialize the background NFC setting
+        backgroundNfcEnabled = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_ENABLE_BACKGROUND_NFC,
+            AppConstants.DefaultSettings.ENABLE_BACKGROUND_NFC
+        )
+        Log.d(TAG, "Initial background NFC setting: enabled=$backgroundNfcEnabled")
     }
     
     private fun setupClickListeners() {
@@ -447,19 +465,13 @@ class MainActivity : Activity(), ReaderCallback {
      * Handle NFC intents, whether from foreground dispatch or from app launch
      */
     private fun handleNfcIntent(intent: Intent) {
-        Log.d(TAG, "Handling NFC intent: ${intent.action}")
-        
-        // Check if background NFC is enabled
-        val enableBackgroundNfc = dbHelper.getBooleanSetting(
-            SettingsContract.SettingsEntry.KEY_ENABLE_BACKGROUND_NFC,
-            AppConstants.DefaultSettings.ENABLE_BACKGROUND_NFC
-        )
-        
-        // If background NFC is disabled and this is a background launch, don't proceed
-        if (!enableBackgroundNfc && intent.action != NfcAdapter.ACTION_TECH_DISCOVERED) {
-            Log.d(TAG, "Background NFC is disabled, ignoring NFC intent")
+        // Check if the app was launched from background and if background NFC is disabled
+        if (!isAppInForeground && !backgroundNfcEnabled) {
+            Log.d(TAG, "Ignoring NFC intent because background NFC is disabled")
             return
         }
+        
+        Log.d(TAG, "Handling NFC intent: ${intent.action}")
         
         // Use the new API for getting parcelable extras if available
         val tag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -665,6 +677,10 @@ class MainActivity : Activity(), ReaderCallback {
     override fun onResume() {
         super.onResume()
         
+        // Register for background NFC setting changes
+        val filter = IntentFilter(SettingsActivity.ACTION_BACKGROUND_NFC_SETTING_CHANGED)
+        registerReceiver(settingsChangeReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        
         // Enable foreground dispatch to intercept all NFC intents
         enableForegroundDispatch()
         
@@ -685,6 +701,13 @@ class MainActivity : Activity(), ReaderCallback {
 
     override fun onPause() {
         super.onPause()
+        
+        // Unregister the receiver
+        try {
+            unregisterReceiver(settingsChangeReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Receiver not registered
+        }
         
         // Only disable reader mode if we're not in retry mode
         if (!isRetryingTransfer) {
@@ -1279,9 +1302,15 @@ class MainActivity : Activity(), ReaderCallback {
         totalChunks = 0
     }
 
+    /**
+     * Scroll to the bottom of the message list
+     */
     private fun scrollToBottom() {
         rvMessages.post {
-            rvMessages.smoothScrollToPosition(messageAdapter.itemCount - 1)
+            val itemCount = messageAdapter.itemCount
+            if (itemCount > 0) {
+                rvMessages.smoothScrollToPosition(itemCount - 1)
+            }
         }
     }
     
@@ -1418,7 +1447,6 @@ class MainActivity : Activity(), ReaderCallback {
             messageAdapter.addSentMessage(messageText)
         } else {
             messageAdapter.addReceivedMessage(messageText)
-            messageAdapter.itemCount - 1
         }
         
         // Scroll to show the new message
@@ -1616,4 +1644,10 @@ class MainActivity : Activity(), ReaderCallback {
         
         Log.d(TAG, "Restored app state")
     }
+
+    // Helper method to determine if the app is in the foreground
+    private val isAppInForeground: Boolean
+        get() {
+            return hasWindowFocus() || (intent?.getBooleanExtra("from_background_receive", false) == true)
+        }
 }

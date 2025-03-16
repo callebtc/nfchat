@@ -1,6 +1,9 @@
 package com.example.nfcdemo
 
 import android.app.Activity
+import android.content.ComponentName
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -169,6 +172,9 @@ class SettingsActivity : Activity() {
                 SettingsContract.SettingsEntry.KEY_ENABLE_BACKGROUND_NFC,
                 isChecked
             )
+            
+            // Update the NFC intent filter components' enabled state
+            updateNfcComponentState(isChecked)
         }
         
         // Bring to foreground checkbox
@@ -219,6 +225,53 @@ class SettingsActivity : Activity() {
                 validTransferRetryTimeout.toString()
             )
         }
+    }
+    
+    /**
+     * Update the NFC component state based on the background NFC setting
+     * This enables or disables the NFC intent filters in the manifest
+     */
+    private fun updateNfcComponentState(enabled: Boolean) {
+        val packageManager = packageManager
+        val componentName = ComponentName(this, MainActivity::class.java)
+        
+        // Get the current component state
+        val componentState = packageManager.getComponentEnabledSetting(componentName)
+        
+        // Calculate the new state
+        val newState = if (enabled) {
+            PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
+        } else {
+            // When disabled, we still want the app to be launchable normally,
+            // but we'll disable the NFC intent filters in MainActivity
+            PackageManager.COMPONENT_ENABLED_STATE_DEFAULT
+        }
+        
+        // Only update if the state has changed
+        if (componentState != newState) {
+            Log.d(TAG, "Updating NFC component state to: $newState")
+            
+            try {
+                // This approach doesn't work well for disabling specific intent filters
+                // Instead, we'll use a flag in the app to control this behavior
+                // packageManager.setComponentEnabledSetting(componentName, newState, PackageManager.DONT_KILL_APP)
+                
+                // Broadcast an intent to notify the app about the setting change
+                val intent = Intent(ACTION_BACKGROUND_NFC_SETTING_CHANGED)
+                intent.putExtra(EXTRA_BACKGROUND_NFC_ENABLED, enabled)
+                sendBroadcast(intent)
+                
+                Log.d(TAG, "Sent broadcast to update NFC background behavior: enabled=$enabled")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error updating component state: ${e.message}")
+            }
+        }
+    }
+    
+    companion object {
+        // Action for broadcasting NFC background setting changes
+        const val ACTION_BACKGROUND_NFC_SETTING_CHANGED = "com.example.nfcdemo.ACTION_BACKGROUND_NFC_SETTING_CHANGED"
+        const val EXTRA_BACKGROUND_NFC_ENABLED = "background_nfc_enabled"
     }
     
     override fun onDestroy() {
