@@ -204,7 +204,7 @@ class CardEmulationService : HostApduService() {
                     AppConstants.DefaultSettings.BRING_TO_FOREGROUND
                 )
                 
-                if (bringToForeground) {
+                if (bringToForeground && !isAppInForeground()) {
                     // Create an intent to launch the MainActivity
                     val intent = Intent(this, MainActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)

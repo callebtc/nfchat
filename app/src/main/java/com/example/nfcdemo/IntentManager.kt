@@ -62,6 +62,11 @@ class IntentManager(
      * Handle a new intent received by the activity
      */
     fun handleNewIntent(intent: Intent, appState: AppState, etMessage: EditText) {
+        // check it intent is null
+        if (intent.action == null) {
+            Log.d(TAG, "Intent is null")
+            return
+        }
         Log.d(TAG, "New intent received: ${intent.action}")
         
         // Handle share intents
@@ -85,7 +90,7 @@ class IntentManager(
         
         // Handle being brought to the foreground from a background message receive
         if (intent.getBooleanExtra("from_background_receive", false)) {
-            Log.d(TAG, "App brought to foreground from background message receive")
+            Log.d(TAG, "from_background_receive: App brought to foreground from background message receive")
             // Make sure we're in receive mode
             if (appState != AppState.RECEIVING) {
                 transferManager.switchToReceiveMode()
