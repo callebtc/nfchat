@@ -20,6 +20,8 @@ class SettingsActivity : Activity() {
     private lateinit var cbUseInternalBrowser: CheckBox
     private lateinit var cbAutoSendShared: CheckBox
     private lateinit var cbCloseAfterSharedSend: CheckBox
+    private lateinit var cbEnableBackgroundNfc: CheckBox
+    private lateinit var cbBringToForeground: CheckBox
     private lateinit var etMaxChunkSize: EditText
     private lateinit var etChunkDelay: EditText
     private lateinit var etTransferRetryTimeoutMs: EditText
@@ -38,16 +40,18 @@ class SettingsActivity : Activity() {
         dbHelper = MessageDbHelper(this)
         
         // Initialize views
+        btnBack = findViewById(R.id.btnBack)
         cbAutoOpenLinks = findViewById(R.id.cbAutoOpenLinks)
         cbUseInternalBrowser = findViewById(R.id.cbUseInternalBrowser)
         cbAutoSendShared = findViewById(R.id.cbAutoSendShared)
         cbCloseAfterSharedSend = findViewById(R.id.cbCloseAfterSharedSend)
+        cbEnableBackgroundNfc = findViewById(R.id.cbEnableBackgroundNfc)
+        cbBringToForeground = findViewById(R.id.cbBringToForeground)
         etMaxChunkSize = findViewById(R.id.etMaxChunkSize)
         etChunkDelay = findViewById(R.id.etChunkDelay)
         etTransferRetryTimeoutMs = findViewById(R.id.etTransferRetryTimeoutMs)
-        btnBack = findViewById(R.id.btnBack)
         
-        // Load current settings
+        // Load settings
         loadSettings()
         
         // Set up listeners
@@ -82,6 +86,20 @@ class SettingsActivity : Activity() {
             AppConstants.DefaultSettings.CLOSE_AFTER_SHARED_SEND
         )
         cbCloseAfterSharedSend.isChecked = closeAfterSharedSend
+        
+        // Load enable background NFC setting
+        val enableBackgroundNfc = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_ENABLE_BACKGROUND_NFC, 
+            AppConstants.DefaultSettings.ENABLE_BACKGROUND_NFC
+        )
+        cbEnableBackgroundNfc.isChecked = enableBackgroundNfc
+        
+        // Load bring to foreground setting
+        val bringToForeground = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_BRING_TO_FOREGROUND, 
+            AppConstants.DefaultSettings.BRING_TO_FOREGROUND
+        )
+        cbBringToForeground.isChecked = bringToForeground
         
         // Load max chunk size setting
         originalMaxChunkSize = dbHelper.getSetting(
@@ -141,6 +159,22 @@ class SettingsActivity : Activity() {
         cbCloseAfterSharedSend.setOnCheckedChangeListener { _, isChecked ->
             dbHelper.setBooleanSetting(
                 SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND,
+                isChecked
+            )
+        }
+        
+        // Enable background NFC checkbox
+        cbEnableBackgroundNfc.setOnCheckedChangeListener { _, isChecked ->
+            dbHelper.setBooleanSetting(
+                SettingsContract.SettingsEntry.KEY_ENABLE_BACKGROUND_NFC,
+                isChecked
+            )
+        }
+        
+        // Bring to foreground checkbox
+        cbBringToForeground.setOnCheckedChangeListener { _, isChecked ->
+            dbHelper.setBooleanSetting(
+                SettingsContract.SettingsEntry.KEY_BRING_TO_FOREGROUND,
                 isChecked
             )
         }

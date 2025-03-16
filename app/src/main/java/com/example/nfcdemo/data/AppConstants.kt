@@ -14,6 +14,10 @@ object AppConstants {
         const val AUTO_SEND_SHARED = true
         const val CLOSE_AFTER_SHARED_SEND = false
         
+        // Background behavior settings
+        const val ENABLE_BACKGROUND_NFC = true
+        const val BRING_TO_FOREGROUND = true
+        
         // Chunked message transfer settings
         const val MAX_CHUNK_SIZE = 2048
         const val CHUNK_DELAY_MS = 50L

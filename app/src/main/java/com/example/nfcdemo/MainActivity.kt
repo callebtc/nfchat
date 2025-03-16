@@ -180,6 +180,9 @@ class MainActivity : Activity(), ReaderCallback {
                           intent?.action == NfcAdapter.ACTION_TAG_DISCOVERED ||
                           intent?.action == NfcAdapter.ACTION_NDEF_DISCOVERED
         
+        // Check if we're being brought to the foreground from a background message receive
+        val fromBackgroundReceive = intent?.getBooleanExtra("from_background_receive", false) ?: false
+        
         // Handle incoming share intents first
         if (isShareIntent) {
             handleIncomingShareIntent(intent)
@@ -191,6 +194,14 @@ class MainActivity : Activity(), ReaderCallback {
             startInReceiveMode()
             // Process the NFC intent
             intent?.let { handleNfcIntent(it) }
+        }
+        // Handle being brought to the foreground from a background message receive
+        else if (fromBackgroundReceive) {
+            Log.d(TAG, "App brought to foreground from background message receive")
+            // Make sure we're in receive mode
+            startInReceiveMode()
+            // Show a toast to inform the user
+            Toast.makeText(this, getString(R.string.app_launched_by_nfc), Toast.LENGTH_SHORT).show()
         }
         // Start in receive mode by default, but only if we're not handling a share or NFC intent
         else if (!isShareIntent) {
@@ -413,6 +424,16 @@ class MainActivity : Activity(), ReaderCallback {
             return
         }
         
+        // Handle being brought to the foreground from a background message receive
+        if (intent.getBooleanExtra("from_background_receive", false)) {
+            Log.d(TAG, "App brought to foreground from background message receive")
+            // Make sure we're in receive mode
+            if (appState != AppState.RECEIVING) {
+                switchToReceiveMode()
+            }
+            return
+        }
+        
         // Handle the NFC intent
         if (intent.action == NfcAdapter.ACTION_TECH_DISCOVERED ||
             intent.action == NfcAdapter.ACTION_TAG_DISCOVERED ||
@@ -427,6 +448,18 @@ class MainActivity : Activity(), ReaderCallback {
      */
     private fun handleNfcIntent(intent: Intent) {
         Log.d(TAG, "Handling NFC intent: ${intent.action}")
+        
+        // Check if background NFC is enabled
+        val enableBackgroundNfc = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_ENABLE_BACKGROUND_NFC,
+            AppConstants.DefaultSettings.ENABLE_BACKGROUND_NFC
+        )
+        
+        // If background NFC is disabled and this is a background launch, don't proceed
+        if (!enableBackgroundNfc && intent.action != NfcAdapter.ACTION_TECH_DISCOVERED) {
+            Log.d(TAG, "Background NFC is disabled, ignoring NFC intent")
+            return
+        }
         
         // Use the new API for getting parcelable extras if available
         val tag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

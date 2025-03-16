@@ -52,6 +52,13 @@
     <string name="setting_close_after_shared_send">Close after sending shared message</string>
     <string name="setting_close_after_shared_send_desc">When enabled, the app will close after successfully sending a shared message</string>
     
+    <!-- Background Behavior Settings -->
+    <string name="settings_category_background">Background Behavior</string>
+    <string name="setting_enable_background_nfc">Enable background NFC wake-up</string>
+    <string name="setting_enable_background_nfc_desc">When enabled, the app can be automatically launched when NFC is detected</string>
+    <string name="setting_bring_to_foreground">Bring to foreground on message</string>
+    <string name="setting_bring_to_foreground_desc">When enabled, the app will come to the foreground when a message is received in the background</string>
+    
     <!-- Advanced Settings -->
     <string name="settings_category_advanced">Advanced</string>
     <string name="setting_max_chunk_size">Maximum chunk size</string>

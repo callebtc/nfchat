@@ -8,6 +8,8 @@ import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import com.example.nfcdemo.data.AppConstants
+import com.example.nfcdemo.data.MessageDbHelper
+import com.example.nfcdemo.data.SettingsContract
 import com.example.nfcdemo.nfc.MessageData
 import com.example.nfcdemo.nfc.NfcProtocol
 import java.nio.charset.Charset
@@ -178,6 +180,22 @@ class CardEmulationService : HostApduService() {
             val messageData = MessageData.fromJson(data)
             
             if (messageData != null) {
+                // Check if we should bring the app to the foreground
+                val dbHelper = MessageDbHelper(this)
+                val bringToForeground = dbHelper.getBooleanSetting(
+                    SettingsContract.SettingsEntry.KEY_BRING_TO_FOREGROUND,
+                    AppConstants.DefaultSettings.BRING_TO_FOREGROUND
+                )
+                
+                if (bringToForeground) {
+                    // Create an intent to launch the MainActivity
+                    val intent = Intent(this, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        putExtra("from_background_receive", true)
+                    }
+                    startActivity(intent)
+                }
+                
                 // Notify the listener
                 onDataReceivedListener?.invoke(messageData)
             } else {
@@ -323,6 +341,22 @@ class CardEmulationService : HostApduService() {
         val messageData = MessageData.fromJson(completeMessage)
         
         if (messageData != null) {
+            // Check if we should bring the app to the foreground
+            val dbHelper = MessageDbHelper(this)
+            val bringToForeground = dbHelper.getBooleanSetting(
+                SettingsContract.SettingsEntry.KEY_BRING_TO_FOREGROUND,
+                AppConstants.DefaultSettings.BRING_TO_FOREGROUND
+            )
+            
+            if (bringToForeground) {
+                // Create an intent to launch the MainActivity
+                val intent = Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    putExtra("from_background_receive", true)
+                }
+                startActivity(intent)
+            }
+            
             // Notify the listener
             onDataReceivedListener?.invoke(messageData)
         } else {

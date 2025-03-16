@@ -19,7 +19,7 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         private const val TAG = "MessageDbHelper"
         
         // If you change the database schema, you must increment the database version
-        const val DATABASE_VERSION = 5
+        const val DATABASE_VERSION = 6
         const val DATABASE_NAME = "Messages.db"
 
         // SQL statement to create the messages table - not using const because it uses string interpolation
@@ -85,6 +85,20 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
         }
         db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, closeAfterSharedSendValues)
         
+        // Enable background NFC is enabled by default
+        val enableBackgroundNfcValues = ContentValues().apply {
+            put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_ENABLE_BACKGROUND_NFC)
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettings.ENABLE_BACKGROUND_NFC.toString())
+        }
+        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, enableBackgroundNfcValues)
+        
+        // Bring to foreground on message received is enabled by default
+        val bringToForegroundValues = ContentValues().apply {
+            put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_BRING_TO_FOREGROUND)
+            put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettings.BRING_TO_FOREGROUND.toString())
+        }
+        db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, bringToForegroundValues)
+        
         // Default max chunk size
         val maxChunkSizeValues = ContentValues().apply {
             put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_MAX_CHUNK_SIZE)
@@ -140,27 +154,51 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
                 }
                 db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, useInternalBrowserValues)
             }
+            3, 4 -> {
+                // Upgrade from version 3 or 4 to 5 - Add chunked message settings
+                // Default max chunk size
+                val maxChunkSizeValues = ContentValues().apply {
+                    put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_MAX_CHUNK_SIZE)
+                    put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettingsStrings.MAX_CHUNK_SIZE)
+                }
+                db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, maxChunkSizeValues)
+                
+                // Default chunk delay
+                val chunkDelayValues = ContentValues().apply {
+                    put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_CHUNK_DELAY)
+                    put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettingsStrings.CHUNK_DELAY_MS)
+                }
+                db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, chunkDelayValues)
+                
+                // Default transfer retry timeout
+                val transferRetryTimeoutValues = ContentValues().apply {
+                    put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_TRANSFER_RETRY_TIMEOUT_MS)
+                    put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettingsStrings.TRANSFER_RETRY_TIMEOUT_MS)
+                }
+                db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, transferRetryTimeoutValues)
+            }
+            5 -> {
+                // Upgrade from version 5 to 6 - Add background behavior settings
+                // Enable background NFC is enabled by default
+                val enableBackgroundNfcValues = ContentValues().apply {
+                    put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_ENABLE_BACKGROUND_NFC)
+                    put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettings.ENABLE_BACKGROUND_NFC.toString())
+                }
+                db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, enableBackgroundNfcValues)
+                
+                // Bring to foreground on message received is enabled by default
+                val bringToForegroundValues = ContentValues().apply {
+                    put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_BRING_TO_FOREGROUND)
+                    put(SettingsContract.SettingsEntry.COLUMN_VALUE, AppConstants.DefaultSettings.BRING_TO_FOREGROUND.toString())
+                }
+                db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, bringToForegroundValues)
+            }
             // Add more cases for future migrations
-            3 -> {
-                // Upgrade from version 3 to 4 - Add internal browser setting
-                val useInternalBrowserValues = ContentValues().apply {
-                    put(SettingsContract.SettingsEntry.COLUMN_KEY, SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER)
-                    put(SettingsContract.SettingsEntry.COLUMN_VALUE, "false")
-                }
-                db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, useInternalBrowserValues)
-            }
-            4 -> {
-                // Upgrade from version 4 to 5 - Add message ID column
-                val messageIdValues = ContentValues().apply {
-                    put(MessageContract.MessageEntry.COLUMN_MESSAGE_ID, "0")
-                }
-                db.update(
-                    MessageContract.MessageEntry.TABLE_NAME,
-                    messageIdValues,
-                    null,
-                    null
-                )
-            }
+        }
+        
+        // If we're upgrading across multiple versions, we need to handle each step
+        if (oldVersion < newVersion - 1) {
+            onUpgrade(db, oldVersion + 1, newVersion)
         }
     }
 

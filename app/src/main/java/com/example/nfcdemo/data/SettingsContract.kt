@@ -18,6 +18,10 @@ object SettingsContract {
         const val KEY_AUTO_SEND_SHARED = "auto_send_shared"
         const val KEY_CLOSE_AFTER_SHARED_SEND = "close_after_shared_send"
         
+        // Background behavior settings
+        const val KEY_ENABLE_BACKGROUND_NFC = "enable_background_nfc"
+        const val KEY_BRING_TO_FOREGROUND = "bring_to_foreground"
+        
         // Advanced settings keys for chunked message transfer
         const val KEY_MAX_CHUNK_SIZE = "max_chunk_size"
         const val KEY_CHUNK_DELAY = "chunk_delay"
