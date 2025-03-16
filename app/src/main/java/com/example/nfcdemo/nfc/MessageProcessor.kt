@@ -62,43 +62,31 @@ object MessageProcessor {
                     url
                 }
                 
-                // Check if we should use the internal browser
-                val useInternalBrowser = dbHelper.getBooleanSetting(
-                    SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
-                    AppConstants.DefaultSettings.USE_INTERNAL_BROWSER
-                )
-                
-                if (useInternalBrowser) {
-                    openUrlInInternalBrowser(context, fullUrl)
-                } else {
-                    openUrlInExternalBrowser(context, fullUrl)
-                }
+                // Open the URL based on settings
+                openUrl(context, fullUrl, dbHelper)
             }
         }
     }
     
     /**
-     * Open a URL in the internal WebView
+     * Open a URL based on app settings (internal or external browser)
+     * @param context The context
+     * @param url The URL to open
+     * @param dbHelper The database helper for accessing settings
      */
-    private fun openUrlInInternalBrowser(context: Context, url: String) {
-        // Check if there's already a WebViewActivity open
-        val currentWebView = WebViewActivityManager.getCurrentWebViewActivity()
-        if (currentWebView != null) {
-            // Close the existing WebView first
-            currentWebView.finish()
-            
-            // Small delay to ensure the previous activity is properly closed
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                // Open the URL in a new WebView
-                val intent = Intent(context, WebViewActivity::class.java)
-                intent.putExtra(WebViewActivity.EXTRA_URL, url)
-                context.startActivity(intent)
-            }, 100)
+    fun openUrl(context: Context, url: String, dbHelper: MessageDbHelper) {
+        // Check if we should use the internal browser
+        val useInternalBrowser = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
+            AppConstants.DefaultSettings.USE_INTERNAL_BROWSER
+        )
+        
+        if (useInternalBrowser) {
+            // Use the WebViewActivityManager to load the URL
+            WebViewActivityManager.loadUrl(context, url)
         } else {
-            // Open the URL in an internal WebView
-            val intent = Intent(context, WebViewActivity::class.java)
-            intent.putExtra(WebViewActivity.EXTRA_URL, url)
-            context.startActivity(intent)
+            // Open in external browser
+            openUrlInExternalBrowser(context, url)
         }
     }
     

@@ -24,6 +24,7 @@ import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import com.example.nfcdemo.data.MessageDbHelper
 import com.example.nfcdemo.data.SettingsContract
+import com.example.nfcdemo.nfc.MessageProcessor
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -90,12 +91,6 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         }
         
         private fun handleLinkClick(url: String, fullMessageContent: String?): Boolean {
-            // Check if we should use the internal browser
-            val useInternalBrowser = dbHelper.getBooleanSetting(
-                SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
-                false
-            )
-            
             // If we have the full message content, try to find the complete URL
             val completeUrl = if (fullMessageContent != null) {
                 findCompleteUrl(url, fullMessageContent)
@@ -110,31 +105,8 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
                 completeUrl
             }
             
-            if (useInternalBrowser) {
-                // Check if there's already a WebViewActivity open
-                val currentWebView = WebViewActivityManager.getCurrentWebViewActivity()
-                if (currentWebView != null) {
-                    // Close the existing WebView first
-                    currentWebView.finish()
-                    
-                    // Small delay to ensure the previous activity is properly closed
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        // Open the URL in a new WebView
-                        val intent = Intent(context, WebViewActivity::class.java)
-                        intent.putExtra(WebViewActivity.EXTRA_URL, fullUrl)
-                        context.startActivity(intent)
-                    }, 100)
-                } else {
-                    // Open the URL in a new WebView
-                    val intent = Intent(context, WebViewActivity::class.java)
-                    intent.putExtra(WebViewActivity.EXTRA_URL, fullUrl)
-                    context.startActivity(intent)
-                }
-            } else {
-                // Open the URL in an external browser
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fullUrl))
-                context.startActivity(intent)
-            }
+            // Use the MessageProcessor to open the URL
+            MessageProcessor.openUrl(context, fullUrl, dbHelper)
             
             return true
         }

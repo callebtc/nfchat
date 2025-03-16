@@ -9,7 +9,7 @@ import android.webkit.WebViewClient
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
-
+import android.util.Log
 /**
  * Activity for displaying web content in an internal browser
  */
@@ -258,5 +258,23 @@ class WebViewActivity : Activity() {
         super.onResume()
         // Resume JavaScript execution and WebView processing when activity becomes visible
         webView.onResume()
+    }
+    
+    /**
+     * Load a new URL in the existing WebView
+     * This method can be called from outside to navigate without recreating the activity
+     * @param url The URL to load
+     */
+    fun loadNewUrl(url: String) {
+        // Make sure we're on the UI thread
+        runOnUiThread {
+            // Reset progress bar
+            progressBar.progress = 0
+            progressBar.visibility = View.VISIBLE
+            
+            // Load the new URL
+            Log.d("WebViewActivity", "Loading new URL: $url")
+            webView.loadUrl(url)
+        }
     }
 } 

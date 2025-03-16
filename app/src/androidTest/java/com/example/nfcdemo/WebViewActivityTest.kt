@@ -15,6 +15,8 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class WebViewActivityTest {
@@ -157,5 +159,46 @@ class WebViewActivityTest {
         
         // Verify that the WebViewActivity is removed from the WebViewActivityManager
         assertNull(WebViewActivityManager.getCurrentWebViewActivity())
+    }
+    
+    @Test
+    fun testLoadNewUrl() {
+        val initialUrl = testUrl
+        val newUrl = "https://example.org"
+        
+        // Verify the initial URL is loaded
+        activityScenario.onActivity { activity ->
+            val webView = activity.findViewById<WebView>(R.id.webView)
+            assertEquals(initialUrl, webView.url)
+        }
+        
+        // Use a CountDownLatch to wait for the URL to load
+        val latch = CountDownLatch(1)
+        
+        // Load a new URL using the loadNewUrl method
+        activityScenario.onActivity { activity ->
+            // Set a WebViewClient to detect when the page is loaded
+            val webView = activity.findViewById<WebView>(R.id.webView)
+            webView.webViewClient = object : android.webkit.WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    if (url == newUrl) {
+                        latch.countDown()
+                    }
+                }
+            }
+            
+            // Call the loadNewUrl method
+            activity.loadNewUrl(newUrl)
+        }
+        
+        // Wait for the page to load (with timeout)
+        latch.await(5, TimeUnit.SECONDS)
+        
+        // Verify the new URL is loaded
+        activityScenario.onActivity { activity ->
+            val webView = activity.findViewById<WebView>(R.id.webView)
+            assertEquals(newUrl, webView.url)
+        }
     }
 } 
