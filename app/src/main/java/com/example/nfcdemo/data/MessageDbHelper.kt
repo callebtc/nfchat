@@ -350,4 +350,12 @@ class MessageDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAM
     fun setBooleanSetting(key: String, value: Boolean): Long {
         return setSetting(key, value.toString())
     }
+
+    /**
+     * Get all messages from the database
+     */
+    fun getAllMessages(): List<MessageAdapter.Message> {
+        // Simply call getRecentMessages with a very large limit
+        return getRecentMessages(Int.MAX_VALUE)
+    }
 } 

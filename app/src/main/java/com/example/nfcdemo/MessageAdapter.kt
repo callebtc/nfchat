@@ -174,8 +174,23 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
         return MESSAGE_LENGTH_LIMIT
     }
 
-    private fun loadMessageHistory() {
+    // Method to clear all messages from the adapter
+    fun clearMessages() {
+        messages.clear()
+        notifyDataSetChanged()
+    }
+
+    // Method to set messages from a list
+    fun setMessages(newMessages: List<Message>) {
+        messages.clear()
+        messages.addAll(newMessages)
+        notifyDataSetChanged()
+    }
+
+    // Load message history from database
+    fun loadMessageHistory() {
         val historyMessages = dbHelper.getRecentMessages(100)
+        messages.clear()
         messages.addAll(historyMessages)
         notifyDataSetChanged()
     }

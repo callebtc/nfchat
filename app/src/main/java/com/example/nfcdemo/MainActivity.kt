@@ -132,6 +132,9 @@ class MainActivity : Activity(), ReaderCallback {
         }
         rvMessages.adapter = messageAdapter
         
+        // Load messages from database
+        loadMessagesFromDatabase()
+        
         // Set the message length limit
         setMessageLengthLimit(messageLengthLimit)
         
@@ -180,6 +183,11 @@ class MainActivity : Activity(), ReaderCallback {
         // Start in receive mode by default, but only if we're not handling a share intent
         if (!isShareIntent) {
             startInReceiveMode()
+        }
+        
+        // Restore state if available
+        if (savedInstanceState != null) {
+            restoreAppState(savedInstanceState)
         }
     }
     
@@ -1429,5 +1437,98 @@ class MainActivity : Activity(), ReaderCallback {
             Log.e(TAG, "Unexpected error sending message: ${e.message}")
             resetAndSwitchToReceiveMode("Error: ${e.message}")
         }
+    }
+
+    /**
+     * Load messages from the database
+     */
+    private fun loadMessagesFromDatabase() {
+        // Clear existing messages
+        messageAdapter.clearMessages()
+        
+        // Load messages from database
+        val messages = dbHelper.getAllMessages()
+        messageAdapter.setMessages(messages)
+        
+        // Scroll to bottom
+        scrollToBottom()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        // Don't call super.onSaveInstanceState() to prevent the framework from saving the view hierarchy
+        // This prevents TransactionTooLargeException when there are large messages in the RecyclerView
+        
+        // Save minimal app state
+        outState.putString("appState", appState.name)
+        outState.putString("lastReceivedMessageId", lastReceivedMessageId)
+        outState.putBoolean("openedViaShareIntent", openedViaShareIntent)
+        
+        // Save chunked transfer state
+        outState.putString("chunkedTransferState", chunkedTransferState.name)
+        outState.putInt("currentChunkIndex", currentChunkIndex)
+        outState.putInt("totalChunks", totalChunks)
+        outState.putBoolean("isRetryingTransfer", isRetryingTransfer)
+        
+        // Save acknowledged chunks as an IntArray
+        outState.putIntArray("acknowledgedChunks", acknowledgedChunks.toIntArray())
+        
+        Log.d(TAG, "Saved minimal instance state without view hierarchy")
+    }
+
+    /**
+     * Restore app state from saved instance state
+     */
+    private fun restoreAppState(savedInstanceState: Bundle) {
+        // Restore app state
+        val savedAppState = savedInstanceState.getString("appState")
+        if (savedAppState != null) {
+            try {
+                appState = AppState.valueOf(savedAppState)
+            } catch (e: IllegalArgumentException) {
+                appState = AppState.IDLE
+            }
+        }
+        
+        lastReceivedMessageId = savedInstanceState.getString("lastReceivedMessageId", "")
+        openedViaShareIntent = savedInstanceState.getBoolean("openedViaShareIntent", false)
+        
+        // Restore chunked transfer state
+        val savedTransferState = savedInstanceState.getString("chunkedTransferState")
+        if (savedTransferState != null) {
+            try {
+                chunkedTransferState = ChunkedTransferState.valueOf(savedTransferState)
+            } catch (e: IllegalArgumentException) {
+                chunkedTransferState = ChunkedTransferState.IDLE
+            }
+        }
+        
+        currentChunkIndex = savedInstanceState.getInt("currentChunkIndex", 0)
+        totalChunks = savedInstanceState.getInt("totalChunks", 0)
+        isRetryingTransfer = savedInstanceState.getBoolean("isRetryingTransfer", false)
+        
+        // Restore acknowledged chunks
+        val savedAcknowledgedChunks = savedInstanceState.getIntArray("acknowledgedChunks")
+        if (savedAcknowledgedChunks != null) {
+            acknowledgedChunks.clear()
+            acknowledgedChunks.addAll(savedAcknowledgedChunks.toSet())
+        }
+        
+        // If we were in the middle of a transfer, reset to receive mode
+        if (chunkedTransferState != ChunkedTransferState.IDLE || appState == AppState.SENDING) {
+            // Reset chunked send mode
+            resetChunkedSendMode()
+            
+            // Switch to receive mode
+            mainHandler.postDelayed({
+                switchToReceiveMode()
+            }, 500)
+            
+            Log.d(TAG, "Restored from a transfer state, resetting to receive mode")
+        }
+        
+        // Update UI based on restored state
+        updateModeIndicators()
+        
+        Log.d(TAG, "Restored app state")
     }
 }
