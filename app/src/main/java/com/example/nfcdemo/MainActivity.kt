@@ -2,6 +2,7 @@ package com.example.nfcdemo
 
 import android.app.Activity
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -26,6 +27,7 @@ import android.util.Patterns
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -33,22 +35,21 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.nfcdemo.data.AppConstants
 import com.example.nfcdemo.data.MessageDbHelper
 import com.example.nfcdemo.data.SettingsContract
-import java.nio.charset.Charset
-import java.io.IOException
-import org.json.JSONObject
-import java.util.UUID
+import com.example.nfcdemo.handlers.CashuHandler
+import com.example.nfcdemo.nfc.ChunkwiseTransferManager
+import com.example.nfcdemo.nfc.ChunkedTransferState
 import com.example.nfcdemo.nfc.MessageData
 import com.example.nfcdemo.nfc.MessageProcessor
 import com.example.nfcdemo.nfc.NfcProtocol
-import android.content.BroadcastReceiver
-import com.example.nfcdemo.nfc.ChunkwiseTransferManager
-import com.example.nfcdemo.nfc.ChunkedTransferState
 import com.example.nfcdemo.nfc.TransferManager
-import com.example.nfcdemo.handlers.CashuHandler
+import com.example.nfcdemo.ui.AnimationUtils
+import java.io.IOException
+import java.nio.charset.Charset
+import java.util.UUID
+import org.json.JSONObject
 import com.example.nfcdemo.handlers.LinkHandler
 import com.example.nfcdemo.handlers.MessageHandlerManager
-import android.widget.ProgressBar
-import com.example.nfcdemo.ui.AnimationUtils
+import com.example.nfcdemo.CardEmulationService
 
 /**
  * Enum representing the different states of the app
@@ -98,6 +99,42 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
                 backgroundNfcEnabled = intent.getBooleanExtra(SettingsActivity.EXTRA_BACKGROUND_NFC_ENABLED, true)
                 intentManager.setBackgroundNfcEnabled(backgroundNfcEnabled)
                 Log.d(TAG, "Background NFC setting changed: enabled=$backgroundNfcEnabled")
+            }
+        }
+    }
+
+    // Service lifecycle receiver
+    private val serviceLifecycleReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                CardEmulationService.ACTION_SERVICE_STARTED -> {
+                    Log.d(TAG, "Received SERVICE_STARTED broadcast")
+                    
+                    // Check if the service is running in degraded mode
+                    val degradedMode = intent.getBooleanExtra("degraded_mode", false)
+                    if (degradedMode) {
+                        Log.d(TAG, "Service is running in degraded mode")
+                        // Show a toast to inform the user
+                        Toast.makeText(
+                            context, 
+                            "NFC service is running in degraded mode. Messages may be lost if the app is closed.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+                CardEmulationService.ACTION_SERVICE_DESTROYED -> {
+                    Log.d(TAG, "Received SERVICE_DESTROYED broadcast, restarting service")
+                    if (appState == AppState.RECEIVING) {
+                        // Restart the service
+                        val serviceIntent = Intent(context, CardEmulationService::class.java)
+                        context.startService(serviceIntent)
+                        
+                        // Re-register listeners after a short delay
+                        mainHandler.postDelayed({
+                            transferManager.setupDataReceiver()
+                        }, 500)
+                    }
+                }
             }
         }
     }
@@ -579,8 +616,15 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         super.onResume()
         
         // Register for background NFC setting changes
-        val filter = IntentFilter(SettingsActivity.ACTION_BACKGROUND_NFC_SETTING_CHANGED)
-        registerReceiver(settingsChangeReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        val settingsFilter = IntentFilter(SettingsActivity.ACTION_BACKGROUND_NFC_SETTING_CHANGED)
+        registerReceiver(settingsChangeReceiver, settingsFilter, Context.RECEIVER_NOT_EXPORTED)
+        
+        // Register for service lifecycle events
+        val serviceFilter = IntentFilter().apply {
+            addAction(CardEmulationService.ACTION_SERVICE_DESTROYED)
+            addAction(CardEmulationService.ACTION_SERVICE_STARTED)
+        }
+        registerReceiver(serviceLifecycleReceiver, serviceFilter, Context.RECEIVER_NOT_EXPORTED)
         
         // Enable foreground dispatch to intercept all NFC intents
         enableForegroundDispatch()
@@ -604,9 +648,10 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         Log.d(TAG, "MainActivity onPause")
         super.onPause()
         
-        // Unregister the receiver
+        // Unregister the receivers
         try {
             unregisterReceiver(settingsChangeReceiver)
+            unregisterReceiver(serviceLifecycleReceiver)
         } catch (e: IllegalArgumentException) {
             // Receiver not registered
         }

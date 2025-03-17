@@ -1,15 +1,22 @@
 package com.example.nfcdemo
 
 import android.app.ActivityManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.nfc.cardemulation.HostApduService
 import android.os.Binder
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import com.example.nfcdemo.data.AppConstants
 import com.example.nfcdemo.data.MessageDbHelper
 import com.example.nfcdemo.data.SettingsContract
@@ -29,6 +36,18 @@ class CardEmulationService : HostApduService() {
         
         // Static instance of the service for communication
         var instance: CardEmulationService? = null
+        
+        // Notification constants
+        private const val NOTIFICATION_CHANNEL_ID = "nfc_service_channel"
+        private const val NOTIFICATION_ID = 1001
+        
+        // Broadcast actions
+        const val ACTION_SERVICE_STARTED = "com.example.nfcdemo.ACTION_SERVICE_STARTED"
+        const val ACTION_SERVICE_DESTROYED = "com.example.nfcdemo.ACTION_SERVICE_DESTROYED"
+        const val ACTION_REGISTER_LISTENERS = "com.example.nfcdemo.ACTION_REGISTER_LISTENERS"
+        
+        // Saved message data for when service is recreated
+        private var lastReceivedMessageData: MessageData? = null
     }
     
     // Message to be shared when requested
@@ -49,6 +68,22 @@ class CardEmulationService : HostApduService() {
     
     // Callback to notify MainActivity about chunked transfer errors
     var onChunkErrorListener: ((String) -> Unit)? = null
+    
+    // Broadcast receiver for listener registration
+    private val listenerRegistrationReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ACTION_REGISTER_LISTENERS) {
+                Log.d(TAG, "Received request to register listeners")
+                
+                // If we have a saved message that wasn't delivered, deliver it now
+                lastReceivedMessageData?.let { messageData ->
+                    Log.d(TAG, "Delivering saved message: ${messageData.content}")
+                    onDataReceivedListener?.invoke(messageData)
+                    lastReceivedMessageData = null
+                }
+            }
+        }
+    }
     
     /**
      * Check if currently receiving a chunked message
@@ -75,18 +110,111 @@ class CardEmulationService : HostApduService() {
         super.onCreate()
         instance = this
         Log.d(TAG, "CardEmulationService created")
+        
+        // Register broadcast receiver
+        val filter = IntentFilter(ACTION_REGISTER_LISTENERS)
+        registerReceiver(listenerRegistrationReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        
+        // Start as a foreground service to prevent it from being killed
+        startForegroundService()
+        
+        // Broadcast that the service has started
+        sendBroadcast(Intent(ACTION_SERVICE_STARTED))
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "CardEmulationService started with startId: $startId")
+        
+        // If the service is restarted after being killed, make sure it's in foreground
+        if (intent?.action == Intent.ACTION_MAIN) {
+            startForegroundService()
+        }
+        
         // If the service is killed, restart it
         return Service.START_STICKY
     }
     
     override fun onDestroy() {
-        super.onDestroy()
-        instance = null
         Log.d(TAG, "CardEmulationService destroyed")
+        
+        // Unregister receiver
+        try {
+            unregisterReceiver(listenerRegistrationReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Receiver not registered
+        }
+        
+        // Broadcast that the service is being destroyed
+        sendBroadcast(Intent(ACTION_SERVICE_DESTROYED))
+        
+        // Clear the static instance
+        instance = null
+        
+        super.onDestroy()
+    }
+    
+    /**
+     * Start the service as a foreground service
+     */
+    private fun startForegroundService() {
+        try {
+            // Create notification channel for Android O and above
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    NOTIFICATION_CHANNEL_ID,
+                    "NFC Service Channel",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Channel for NFC service notifications"
+                    setShowBadge(false)
+                }
+                
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.createNotificationChannel(channel)
+            }
+            
+            // Create an intent to open the MainActivity when the notification is tapped
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            
+            // Build the notification
+            val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+                .setContentTitle("NFC Service")
+                .setContentText("Ready to receive NFC messages")
+                .setSmallIcon(R.drawable.ic_nfc)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setOngoing(true)
+                .build()
+            
+            // Start as foreground service
+            startForeground(NOTIFICATION_ID, notification)
+            Log.d(TAG, "Started as foreground service")
+        } catch (e: SecurityException) {
+            // Check if this is the specific permission issue for Android 14+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && 
+                e.message?.contains("FOREGROUND_SERVICE_DATA_SYNC") == true) {
+                Log.e(TAG, "Failed to start as foreground service due to missing FOREGROUND_SERVICE_DATA_SYNC permission: ${e.message}")
+                Log.d(TAG, "Running as a regular service instead. Some messages may be lost if the service is killed.")
+                
+                // Broadcast that we're running in a degraded mode
+                val intent = Intent(ACTION_SERVICE_STARTED).apply {
+                    putExtra("degraded_mode", true)
+                }
+                sendBroadcast(intent)
+            } else {
+                // If we don't have the permission, just run as a regular service
+                Log.e(TAG, "Failed to start as foreground service: ${e.message}")
+                Log.d(TAG, "Running as a regular service instead")
+            }
+        } catch (e: Exception) {
+            // Handle any other exceptions
+            Log.e(TAG, "Error starting foreground service: ${e.message}")
+        }
     }
     
     override fun onDeactivated(reason: Int) {
@@ -213,8 +341,16 @@ class CardEmulationService : HostApduService() {
                     startActivity(intent)
                 }
                 
-                // Notify the listener
-                onDataReceivedListener?.invoke(messageData)
+                // Save the message data in case the service is destroyed before the listener is registered
+                lastReceivedMessageData = messageData
+                
+                // Notify the listener if available
+                if (onDataReceivedListener != null) {
+                    onDataReceivedListener?.invoke(messageData)
+                    lastReceivedMessageData = null
+                } else {
+                    Log.d(TAG, "onDataReceivedListener is null, saving message for later delivery")
+                }
             } else {
                 Log.e(TAG, "Failed to parse message data: $data")
             }

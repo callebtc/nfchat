@@ -1,8 +1,10 @@
 package com.example.nfcdemo.nfc
 
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.TagLostException
@@ -49,12 +51,40 @@ class TransferManager(private val context: Activity) {
     var onChunkTransferProgress: ((Int, Int) -> Unit)? = null
     var onChunkTransferCompleted: (() -> Unit)? = null
     
+    // Service lifecycle receiver
+    private val serviceLifecycleReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                CardEmulationService.ACTION_SERVICE_STARTED -> {
+                    Log.d(TAG, "CardEmulationService started, registering listeners")
+                    mainHandler.postDelayed({
+                        setupDataReceiver()
+                        // Request the service to deliver any pending messages
+                        val registerIntent = Intent(CardEmulationService.ACTION_REGISTER_LISTENERS)
+                        context?.sendBroadcast(registerIntent)
+                    }, 100)
+                }
+                CardEmulationService.ACTION_SERVICE_DESTROYED -> {
+                    Log.d(TAG, "CardEmulationService destroyed, will re-register listeners when it restarts")
+                    // The service will be restarted automatically due to START_STICKY
+                }
+            }
+        }
+    }
+    
     init {
         // Initialize NFC adapter
         nfcAdapter = NfcAdapter.getDefaultAdapter(context)
         
         // Set up chunked transfer manager callbacks
         setupChunkwiseTransferCallbacks()
+        
+        // Register service lifecycle receiver
+        val filter = IntentFilter().apply {
+            addAction(CardEmulationService.ACTION_SERVICE_STARTED)
+            addAction(CardEmulationService.ACTION_SERVICE_DESTROYED)
+        }
+        context.registerReceiver(serviceLifecycleReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
     }
     
     /**
@@ -325,6 +355,13 @@ class TransferManager(private val context: Activity) {
                 // Hide the progress bar on error
                 onChunkTransferCompleted?.invoke()
             }
+        }
+        
+        // If the service instance is null, the service might have been destroyed and not yet restarted
+        if (CardEmulationService.instance == null) {
+            Log.d(TAG, "CardEmulationService instance is null, restarting service")
+            val intent = Intent(context, CardEmulationService::class.java)
+            context.startService(intent)
         }
     }
     
@@ -668,6 +705,13 @@ class TransferManager(private val context: Activity) {
     fun cleanup() {
         // Clean up chunked transfer manager resources
         chunkwiseTransferManager.cleanup()
+        
+        // Unregister service lifecycle receiver
+        try {
+            context.unregisterReceiver(serviceLifecycleReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Receiver not registered
+        }
         
         // If we're not in receive mode anymore, stop the service
         if (appState != AppState.RECEIVING) {
