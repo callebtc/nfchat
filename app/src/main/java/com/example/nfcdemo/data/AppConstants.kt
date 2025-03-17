@@ -33,7 +33,8 @@ object AppConstants {
         // Cashu handler settings
         const val ENABLE_CASHU_HANDLER = true
         const val CASHU_USE_APP = false
-        const val CASHU_URL_PATTERN = "https://wallet.cashu.me/#token={token}"
+        const val CASHU_URL_PATTERN = "https://wallet.cashu.me/?token={token}"
+        const val CASHU_USE_INTERNAL_BROWSER = false
     }
     
     // String representations of default values for database storage

@@ -88,6 +88,8 @@
     <string name="setting_cashu_url_pattern_desc">URL pattern to open Cashu tokens. Use {token} as placeholder for the token</string>
     <string name="setting_cashu_use_app">Open with Cashu app</string>
     <string name="setting_cashu_use_app_desc">When enabled, Cashu tokens will be opened with a dedicated app instead of a web URL</string>
+    <string name="setting_cashu_use_internal_browser">Use internal browser for Cashu</string>
+    <string name="setting_cashu_use_internal_browser_desc">When enabled, Cashu tokens will open in the app\'s internal browser instead of an external browser</string>
     
     <string name="web_view_back">Back</string>
     <string name="web_view_forward">Forward</string>

@@ -34,6 +34,7 @@ class SettingsActivity : Activity() {
     private lateinit var cbEnableCashuHandler: CheckBox
     private lateinit var etCashuUrlPattern: EditText
     private lateinit var cbCashuUseApp: CheckBox
+    private lateinit var cbCashuUseInternalBrowser: CheckBox
     
     // Original values to check if they've changed
     private var originalMaxChunkSize = AppConstants.DefaultSettingsStrings.MAX_CHUNK_SIZE
@@ -64,6 +65,7 @@ class SettingsActivity : Activity() {
         cbEnableCashuHandler = findViewById(R.id.cbEnableCashuHandler)
         etCashuUrlPattern = findViewById(R.id.etCashuUrlPattern)
         cbCashuUseApp = findViewById(R.id.cbCashuUseApp)
+        cbCashuUseInternalBrowser = findViewById(R.id.cbCashuUseInternalBrowser)
         
         // Load settings
         loadSettings()
@@ -154,6 +156,12 @@ class SettingsActivity : Activity() {
             AppConstants.DefaultSettings.CASHU_USE_APP
         )
         cbCashuUseApp.isChecked = cashuUseApp
+        
+        val cashuUseInternalBrowser = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_CASHU_USE_INTERNAL_BROWSER, 
+            AppConstants.DefaultSettings.CASHU_USE_INTERNAL_BROWSER
+        )
+        cbCashuUseInternalBrowser.isChecked = cashuUseInternalBrowser
     }
     
     private fun setupListeners() {
@@ -228,6 +236,14 @@ class SettingsActivity : Activity() {
         cbCashuUseApp.setOnCheckedChangeListener { _, isChecked ->
             dbHelper.setBooleanSetting(
                 SettingsContract.SettingsEntry.KEY_CASHU_USE_APP,
+                isChecked
+            )
+        }
+        
+        // Cashu use internal browser checkbox
+        cbCashuUseInternalBrowser.setOnCheckedChangeListener { _, isChecked ->
+            dbHelper.setBooleanSetting(
+                SettingsContract.SettingsEntry.KEY_CASHU_USE_INTERNAL_BROWSER,
                 isChecked
             )
         }

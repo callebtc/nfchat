@@ -17,7 +17,7 @@ class CashuHandler : MessageHandler {
         private const val TAG = "CashuHandler"
         
         // Pattern to match Cashu tokens (cashuA... and cashuB...)
-        private val CASHU_TOKEN_PATTERN = Pattern.compile("\\b(cashuA\\w+|cashuB\\w+)\\b")
+        private val CASHU_TOKEN_PATTERN = Pattern.compile("\\b(cashu[AB][a-zA-Z0-9+/=_-]+)\\b")
     }
     
     /**
@@ -111,10 +111,10 @@ class CashuHandler : MessageHandler {
         // Replace {token} placeholder with the actual token
         val url = urlPattern.replace("{token}", token)
 
-        // Check if we should use the internal browser
+        // Check if we should use the internal browser (using Cashu-specific setting)
         val useInternalBrowser = dbHelper.getBooleanSetting(
-            SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
-            AppConstants.DefaultSettings.USE_INTERNAL_BROWSER
+            SettingsContract.SettingsEntry.KEY_CASHU_USE_INTERNAL_BROWSER, 
+            AppConstants.DefaultSettings.CASHU_USE_INTERNAL_BROWSER
         )
         
         // Use the LinkHandler to open the URL (reusing the same browser settings)

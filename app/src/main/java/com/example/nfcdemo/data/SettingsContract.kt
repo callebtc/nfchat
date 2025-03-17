@@ -31,5 +31,6 @@ object SettingsContract {
         const val KEY_ENABLE_CASHU_HANDLER = "enable_cashu_handler"
         const val KEY_CASHU_URL_PATTERN = "cashu_url_pattern"
         const val KEY_CASHU_USE_APP = "cashu_use_app"
+        const val KEY_CASHU_USE_INTERNAL_BROWSER = "cashu_use_internal_browser"
     }
 } 
