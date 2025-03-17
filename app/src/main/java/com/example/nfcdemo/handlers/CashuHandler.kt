@@ -16,8 +16,8 @@ class CashuHandler : MessageHandler {
     companion object {
         private const val TAG = "CashuHandler"
         
-        // Pattern to match Cashu tokens (cashuA... or cashuB...)
-        private val CASHU_TOKEN_PATTERN = Pattern.compile("\\b(cashuA[a-zA-Z0-9]+|cashuB[a-zA-Z0-9]+)\\b")
+        // Pattern to match Cashu tokens (cashuA... and cashuB...)
+        private val CASHU_TOKEN_PATTERN = Pattern.compile("\\b(cashuA\\w+|cashuB\\w+)\\b")
     }
     
     /**
