@@ -110,9 +110,15 @@ class CashuHandler : MessageHandler {
         
         // Replace {token} placeholder with the actual token
         val url = urlPattern.replace("{token}", token)
+
+        // Check if we should use the internal browser
+        val useInternalBrowser = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
+            AppConstants.DefaultSettings.USE_INTERNAL_BROWSER
+        )
         
         // Use the LinkHandler to open the URL (reusing the same browser settings)
         val linkHandler = LinkHandler()
-        linkHandler.openUrl(context, url, dbHelper)
+        linkHandler.openUrl(context, url, dbHelper, useInternalBrowser)
     }
 } 

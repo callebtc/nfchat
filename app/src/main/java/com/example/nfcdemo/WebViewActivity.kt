@@ -274,13 +274,10 @@ class WebViewActivity : Activity() {
             // Reset progress bar
             progressBar.progress = 0
             progressBar.visibility = View.VISIBLE
-            
-            // hack: if url contains /#, replace with /?
-            val newUrl = url.replace("/#", "/?")
 
             // Load the new URL
-            Log.d("WebViewActivity", "Loading new URL: $newUrl")
-            webView.loadUrl(newUrl) 
+            Log.d("WebViewActivity", "Loading new URL: $url")
+            webView.loadUrl(url) 
         }
     }
 } 

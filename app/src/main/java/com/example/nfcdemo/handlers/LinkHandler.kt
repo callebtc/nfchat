@@ -37,9 +37,15 @@ class LinkHandler : MessageHandler {
                 } else {
                     url
                 }
+
+                // Check if we should use the internal browser
+                val useInternalBrowser = dbHelper.getBooleanSetting(
+                    SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
+                    AppConstants.DefaultSettings.USE_INTERNAL_BROWSER
+                )
                 
                 // Open the URL based on settings
-                openUrl(context, fullUrl, dbHelper)
+                openUrl(context, fullUrl, dbHelper, useInternalBrowser)
                 return true
             }
         }
@@ -64,13 +70,7 @@ class LinkHandler : MessageHandler {
      * @param url The URL to open
      * @param dbHelper The database helper for accessing settings
      */
-    fun openUrl(context: Context, url: String, dbHelper: MessageDbHelper) {
-        // Check if we should use the internal browser
-        val useInternalBrowser = dbHelper.getBooleanSetting(
-            SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
-            AppConstants.DefaultSettings.USE_INTERNAL_BROWSER
-        )
-        
+    fun openUrl(context: Context, url: String, dbHelper: MessageDbHelper, useInternalBrowser: Boolean) {
         if (useInternalBrowser) {
             // Use the WebViewActivityManager to load the URL
             WebViewActivityManager.loadUrl(context, url)

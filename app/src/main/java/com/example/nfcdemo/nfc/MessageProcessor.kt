@@ -88,6 +88,13 @@ object MessageProcessor {
     fun openUrl(context: Context, url: String, dbHelper: MessageDbHelper) {
         // Use the LinkHandler to open the URL
         val linkHandler = LinkHandler()
-        linkHandler.openUrl(context, url, dbHelper)
+
+        // Check if we should use the internal browser
+        val useInternalBrowser = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_USE_INTERNAL_BROWSER, 
+            AppConstants.DefaultSettings.USE_INTERNAL_BROWSER
+        )
+
+        linkHandler.openUrl(context, url, dbHelper, useInternalBrowser)
     }
 } 
