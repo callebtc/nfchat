@@ -93,6 +93,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     private var backgroundNfcEnabled = true
     private val settingsChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            Log.d(TAG, "MainActivity settingsChangeReceiver onReceive")
             if (intent.action == SettingsActivity.ACTION_BACKGROUND_NFC_SETTING_CHANGED) {
                 backgroundNfcEnabled = intent.getBooleanExtra(SettingsActivity.EXTRA_BACKGROUND_NFC_ENABLED, true)
                 intentManager.setBackgroundNfcEnabled(backgroundNfcEnabled)
@@ -102,6 +103,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Log.d(TAG, "MainActivity onCreate")
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
@@ -219,6 +221,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     }
     
     private fun setupClickListeners() {
+        Log.d(TAG, "MainActivity setupClickListeners")
         // Send button
         btnSendMode.setOnClickListener {
             if (etMessage.text.toString().isEmpty()) {
@@ -256,6 +259,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
      * Set up callbacks for the transfer manager
      */
     private fun setupTransferManagerCallbacks() {
+        Log.d(TAG, "MainActivity setupTransferManagerCallbacks")
         transferManager.onAppStateChanged = { newState ->
             appState = newState
             updateModeIndicators()
@@ -355,6 +359,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     }
     
     private fun setupForegroundDispatch() {
+        Log.d(TAG, "MainActivity setupForegroundDispatch")
         // Create a PendingIntent that will be used to deliver NFC intents to our activity
         val intent = Intent(this, javaClass).apply {
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -387,6 +392,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     }
     
     private fun enableForegroundDispatch() {
+        Log.d(TAG, "MainActivity enableForegroundDispatch")
         val nfcAdapter = transferManager.getNfcAdapter()
         if (nfcAdapter != null) {
             try {
@@ -399,6 +405,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     }
     
     private fun disableForegroundDispatch() {
+        Log.d(TAG, "MainActivity disableForegroundDispatch")
         val nfcAdapter = transferManager.getNfcAdapter()
         if (nfcAdapter != null) {
             try {
@@ -411,6 +418,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     }
     
     override fun onNewIntent(intent: Intent) {
+        Log.d(TAG, "MainActivity onNewIntent")
         super.onNewIntent(intent)
         
         // Save the new intent to replace the old one
@@ -452,6 +460,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
      * @return The position of the added message in the adapter
      */
     override fun saveAndAddMessage(messageText: String, isSent: Boolean): Int {
+        Log.d(TAG, "MainActivity saveAndAddMessage")
         if (messageText.isBlank()) return -1
         
         // Add the message to the adapter (which saves to the database)
@@ -491,6 +500,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
      * Load messages from the database
      */
     private fun loadMessagesFromDatabase() {
+        Log.d(TAG, "MainActivity loadMessagesFromDatabase")
         // Clear existing messages
         messageAdapter.clearMessages()
         
@@ -518,6 +528,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
      * Restore app state from saved instance state
      */
     private fun restoreAppState(savedInstanceState: Bundle) {
+        Log.d(TAG, "MainActivity restoreAppState")
         // Restore app state
         val savedAppState = savedInstanceState.getString("appState")
         if (savedAppState != null) {
@@ -564,6 +575,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     }
 
     override fun onResume() {
+        Log.d(TAG, "MainActivity onResume")
         super.onResume()
         
         // Register for background NFC setting changes
@@ -589,6 +601,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     }
 
     override fun onPause() {
+        Log.d(TAG, "MainActivity onPause")
         super.onPause()
         
         // Unregister the receiver
@@ -607,6 +620,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     }
     
     override fun onDestroy() {
+        Log.d(TAG, "MainActivity onDestroy")
         super.onDestroy()
         // Clean up database resources
         messageAdapter.cleanup()
@@ -617,6 +631,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     }
 
     override fun onTagDiscovered(tag: Tag) {
+        Log.d(TAG, "MainActivity onTagDiscovered")
         // Delegate to the transfer manager
         transferManager.handleTagDiscovered(tag)
     }
@@ -625,6 +640,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
      * Initialize the message handlers
      */
     private fun initializeMessageHandlers() {
+        Log.d(TAG, "MainActivity initializeMessageHandlers")
         // Clear any existing handlers
         MessageHandlerManager.clearHandlers()
         
