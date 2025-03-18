@@ -15,6 +15,8 @@ import android.os.Binder
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.nfcdemo.data.AppConstants
@@ -25,6 +27,10 @@ import com.example.nfcdemo.nfc.NfcProtocol
 import java.nio.charset.Charset
 import org.json.JSONObject
 
+/**
+ * Host Card Emulation service for NFC communication.
+ * This service handles both foreground and background NFC operations.
+ */
 class CardEmulationService : HostApduService() {
     
     companion object {
@@ -33,9 +39,6 @@ class CardEmulationService : HostApduService() {
         
         // AID for our service
         private val AID = NfcProtocol.hexStringToByteArray(NfcProtocol.DEFAULT_AID)
-        
-        // Static instance of the service for communication
-        var instance: CardEmulationService? = null
         
         // Notification constants
         private const val NOTIFICATION_CHANNEL_ID = "nfc_service_channel"
@@ -46,8 +49,27 @@ class CardEmulationService : HostApduService() {
         const val ACTION_SERVICE_DESTROYED = "com.example.nfcdemo.ACTION_SERVICE_DESTROYED"
         const val ACTION_REGISTER_LISTENERS = "com.example.nfcdemo.ACTION_REGISTER_LISTENERS"
         
+        // Static instance of the service for communication
+        var instance: CardEmulationService? = null
+            private set  // Only allow internal setting
+            
         // Saved message data for when service is recreated
         private var lastReceivedMessageData: MessageData? = null
+        
+        // Restart counter to track service restarts
+        private var serviceRestartCount = 0
+        
+        // Service is running flag
+        private var isServiceRunning = false
+        
+        // Keep track of whether we're a foreground service
+        private var isForegroundService = false
+        
+        // Constants for service management
+        private const val SERVICE_RESTART_DELAY = 2000L // 2 seconds
+        private const val SERVICE_RESTART_THRESHOLD = 2 // Minimum number of restarts before scheduling
+        private const val SERVICE_HEARTBEAT_INTERVAL = 60000L // 1 minute
+        private const val DELAYED_MESSAGE_DELIVERY_MS = 1000L // 1 second
     }
     
     // Message to be shared when requested
@@ -68,6 +90,24 @@ class CardEmulationService : HostApduService() {
     
     // Callback to notify MainActivity about chunked transfer errors
     var onChunkErrorListener: ((String) -> Unit)? = null
+    
+    // Main thread handler for scheduling tasks
+    private val mainHandler = Handler(Looper.getMainLooper())
+    
+    // Heartbeat runnable to periodically check service health
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            Log.d(TAG, "Service heartbeat - count: $serviceRestartCount, foreground: $isForegroundService")
+            
+            // If we're not in foreground mode but should be, try to start as foreground
+            if (!isForegroundService) {
+                startForegroundService()
+            }
+            
+            // Schedule next heartbeat
+            mainHandler.postDelayed(this, SERVICE_HEARTBEAT_INTERVAL)
+        }
+    }
     
     // Broadcast receiver for listener registration
     private val listenerRegistrationReceiver = object : BroadcastReceiver() {
@@ -109,7 +149,10 @@ class CardEmulationService : HostApduService() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        Log.d(TAG, "CardEmulationService created")
+        isServiceRunning = true
+        
+        Log.d(TAG, "CardEmulationService created, restart count: $serviceRestartCount")
+        serviceRestartCount++
         
         // Register broadcast receiver
         val filter = IntentFilter(ACTION_REGISTER_LISTENERS)
@@ -117,6 +160,9 @@ class CardEmulationService : HostApduService() {
         
         // Start as a foreground service to prevent it from being killed
         startForegroundService()
+        
+        // Start heartbeat to keep service healthy
+        startHeartbeat()
         
         // Broadcast that the service has started
         sendBroadcast(Intent(ACTION_SERVICE_STARTED))
@@ -130,12 +176,21 @@ class CardEmulationService : HostApduService() {
             startForegroundService()
         }
         
+        // Reset the flags to ensure we're in a good state
+        isServiceRunning = true
+        
         // If the service is killed, restart it
         return Service.START_STICKY
     }
     
     override fun onDestroy() {
         Log.d(TAG, "CardEmulationService destroyed")
+        
+        isServiceRunning = false
+        isForegroundService = false
+        
+        // Stop heartbeat
+        mainHandler.removeCallbacks(heartbeatRunnable)
         
         // Unregister receiver
         try {
@@ -150,7 +205,45 @@ class CardEmulationService : HostApduService() {
         // Clear the static instance
         instance = null
         
+        // Schedule a delayed restart if needed
+        scheduleServiceRestart()
+        
         super.onDestroy()
+    }
+    
+    /**
+     * Schedule a delayed restart of the service
+     */
+    private fun scheduleServiceRestart() {
+        // Only attempt to restart if we've been running for a while
+        // This prevents rapid restart loops
+        if (serviceRestartCount > SERVICE_RESTART_THRESHOLD) {
+            val restartIntent = Intent(applicationContext, CardEmulationService::class.java)
+            restartIntent.action = Intent.ACTION_MAIN
+            
+            val pendingIntent = PendingIntent.getService(
+                applicationContext,
+                1,
+                restartIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            alarmManager.set(
+                android.app.AlarmManager.RTC_WAKEUP,
+                System.currentTimeMillis() + SERVICE_RESTART_DELAY,
+                pendingIntent
+            )
+            
+            Log.d(TAG, "Scheduled service restart in ${SERVICE_RESTART_DELAY}ms")
+        }
+    }
+    
+    /**
+     * Start the heartbeat to periodically check service health
+     */
+    private fun startHeartbeat() {
+        mainHandler.postDelayed(heartbeatRunnable, SERVICE_HEARTBEAT_INTERVAL)
     }
     
     /**
@@ -183,7 +276,7 @@ class CardEmulationService : HostApduService() {
             
             // Build the notification
             val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-                .setContentTitle("NFC Service")
+                .setContentTitle("NFC Chat Active")
                 .setContentText("Ready to receive NFC messages")
                 .setSmallIcon(R.drawable.ic_nfc)
                 .setContentIntent(pendingIntent)
@@ -193,6 +286,7 @@ class CardEmulationService : HostApduService() {
             
             // Start as foreground service
             startForeground(NOTIFICATION_ID, notification)
+            isForegroundService = true
             Log.d(TAG, "Started as foreground service")
         } catch (e: SecurityException) {
             // Check if this is the specific permission issue for Android 14+
@@ -206,14 +300,17 @@ class CardEmulationService : HostApduService() {
                     putExtra("degraded_mode", true)
                 }
                 sendBroadcast(intent)
+                isForegroundService = false
             } else {
                 // If we don't have the permission, just run as a regular service
                 Log.e(TAG, "Failed to start as foreground service: ${e.message}")
                 Log.d(TAG, "Running as a regular service instead")
+                isForegroundService = false
             }
         } catch (e: Exception) {
             // Handle any other exceptions
             Log.e(TAG, "Error starting foreground service: ${e.message}")
+            isForegroundService = false
         }
     }
     
@@ -325,32 +422,8 @@ class CardEmulationService : HostApduService() {
             val messageData = MessageData.fromJson(data)
             
             if (messageData != null) {
-                // Check if we should bring the app to the foreground
-                val dbHelper = MessageDbHelper(this)
-                val bringToForeground = dbHelper.getBooleanSetting(
-                    SettingsContract.SettingsEntry.KEY_BRING_TO_FOREGROUND,
-                    AppConstants.DefaultSettings.BRING_TO_FOREGROUND
-                )
-                
-                if (bringToForeground && !isAppInForeground()) {
-                    // Create an intent to launch the MainActivity
-                    val intent = Intent(this, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        putExtra("from_background_receive", true)
-                    }
-                    startActivity(intent)
-                }
-                
-                // Save the message data in case the service is destroyed before the listener is registered
-                lastReceivedMessageData = messageData
-                
-                // Notify the listener if available
-                if (onDataReceivedListener != null) {
-                    onDataReceivedListener?.invoke(messageData)
-                    lastReceivedMessageData = null
-                } else {
-                    Log.d(TAG, "onDataReceivedListener is null, saving message for later delivery")
-                }
+                // Process the message data
+                processReceivedMessageData(messageData)
             } else {
                 Log.e(TAG, "Failed to parse message data: $data")
             }
@@ -359,6 +432,48 @@ class CardEmulationService : HostApduService() {
         }
         
         return NfcProtocol.SELECT_OK_SW
+    }
+    
+    /**
+     * Process received message data and handle bringing app to foreground if needed
+     */
+    private fun processReceivedMessageData(messageData: MessageData) {
+        // Check if we should bring the app to the foreground
+        val dbHelper = MessageDbHelper(this)
+        val bringToForeground = dbHelper.getBooleanSetting(
+            SettingsContract.SettingsEntry.KEY_BRING_TO_FOREGROUND,
+            AppConstants.DefaultSettings.BRING_TO_FOREGROUND
+        )
+        
+        if (bringToForeground && !isAppInForeground()) {
+            // Create an intent to launch the MainActivity
+            val intent = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra("from_background_receive", true)
+            }
+            startActivity(intent)
+        }
+        
+        // Save the message data in case the service is destroyed before the listener is registered
+        lastReceivedMessageData = messageData
+        
+        // Notify the listener if available
+        if (onDataReceivedListener != null) {
+            onDataReceivedListener?.invoke(messageData)
+            lastReceivedMessageData = null
+        } else {
+            Log.d(TAG, "onDataReceivedListener is null, saving message for later delivery")
+            
+            // Since no listener is available, schedule a task to check again soon
+            // This helps in cases where the activity is being launched but hasn't registered yet
+            mainHandler.postDelayed({
+                if (lastReceivedMessageData != null && onDataReceivedListener != null) {
+                    Log.d(TAG, "Delivering delayed message: ${lastReceivedMessageData?.content}")
+                    onDataReceivedListener?.invoke(lastReceivedMessageData!!)
+                    lastReceivedMessageData = null
+                }
+            }, DELAYED_MESSAGE_DELIVERY_MS)
+        }
     }
     
     /**
@@ -564,5 +679,4 @@ class CardEmulationService : HostApduService() {
         }
         return false
     }
-
 } 

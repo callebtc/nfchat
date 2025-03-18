@@ -51,6 +51,20 @@ class TransferManager(private val context: Activity) {
     var onChunkTransferProgress: ((Int, Int) -> Unit)? = null
     var onChunkTransferCompleted: (() -> Unit)? = null
     
+    // Service watchdog
+    private val serviceWatchdogRunnable = object : Runnable {
+        override fun run() {
+            // Check if we're in receive mode but service instance is null
+            if (appState == AppState.RECEIVING && CardEmulationService.instance == null) {
+                Log.d(TAG, "Service watchdog detected missing service, restarting")
+                restartCardEmulationService()
+            }
+            
+            // Schedule next check
+            mainHandler.postDelayed(this, SERVICE_WATCHDOG_INTERVAL)
+        }
+    }
+    
     // Service lifecycle receiver
     private val serviceLifecycleReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -67,6 +81,12 @@ class TransferManager(private val context: Activity) {
                 CardEmulationService.ACTION_SERVICE_DESTROYED -> {
                     Log.d(TAG, "CardEmulationService destroyed, will re-register listeners when it restarts")
                     // The service will be restarted automatically due to START_STICKY
+                    // But let's help it along by checking our watchdog soon
+                    mainHandler.postDelayed({
+                        if (appState == AppState.RECEIVING && CardEmulationService.instance == null) {
+                            restartCardEmulationService()
+                        }
+                    }, 500)
                 }
             }
         }
@@ -85,6 +105,9 @@ class TransferManager(private val context: Activity) {
             addAction(CardEmulationService.ACTION_SERVICE_DESTROYED)
         }
         context.registerReceiver(serviceLifecycleReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        
+        // Start the service watchdog
+        startServiceWatchdog()
     }
     
     /**
@@ -262,14 +285,23 @@ class TransferManager(private val context: Activity) {
         onAppStateChanged?.invoke(appState)
         onStatusChanged?.invoke(context.getString(R.string.status_receive_mode))
         
-        // Start the CardEmulationService
-        val intent = Intent(context, CardEmulationService::class.java)
-        context.startService(intent)
-        
-        // Set up the message and listener
-        mainHandler.postDelayed({
+        // Start the CardEmulationService if it's not already running
+        if (CardEmulationService.instance == null) {
+            val intent = Intent(context, CardEmulationService::class.java)
+            intent.action = Intent.ACTION_MAIN
+            context.startService(intent)
+            
+            // Set up the message and listener after a short delay
+            mainHandler.postDelayed({
+                setupDataReceiver()
+            }, 300) // Longer delay to ensure service is up
+        } else {
+            // Set current message on the service
+            setCardEmulationMessage(lastSentMessage)
+            
+            // Set up the message and listener immediately
             setupDataReceiver()
-        }, 100)
+        }
         
         Log.d(TAG, "Switched to receive mode")
     }
@@ -278,6 +310,13 @@ class TransferManager(private val context: Activity) {
      * Set up data receiver for the CardEmulationService
      */
     fun setupDataReceiver() {
+        // If the service instance is null, the service might have been destroyed and not yet restarted
+        if (CardEmulationService.instance == null) {
+            Log.d(TAG, "CardEmulationService instance is null, restarting service")
+            restartCardEmulationService()
+            return
+        }
+        
         // This is a critical function to ensure UI updates happen
         CardEmulationService.instance?.onDataReceivedListener = { messageData ->
             Log.d(TAG, "Data received in TransferManager: ${messageData.content}")
@@ -355,13 +394,6 @@ class TransferManager(private val context: Activity) {
                 // Hide the progress bar on error
                 onChunkTransferCompleted?.invoke()
             }
-        }
-        
-        // If the service instance is null, the service might have been destroyed and not yet restarted
-        if (CardEmulationService.instance == null) {
-            Log.d(TAG, "CardEmulationService instance is null, restarting service")
-            val intent = Intent(context, CardEmulationService::class.java)
-            context.startService(intent)
         }
     }
     
@@ -703,6 +735,9 @@ class TransferManager(private val context: Activity) {
      * Clean up resources
      */
     fun cleanup() {
+        // Stop service watchdog
+        mainHandler.removeCallbacks(serviceWatchdogRunnable)
+        
         // Clean up chunked transfer manager resources
         chunkwiseTransferManager.cleanup()
         
@@ -739,5 +774,43 @@ class TransferManager(private val context: Activity) {
      */
     fun isRetryingTransfer(): Boolean {
         return chunkwiseTransferManager.isRetryingTransfer
+    }
+    
+    /**
+     * Start the service watchdog to ensure the service stays alive
+     */
+    private fun startServiceWatchdog() {
+        mainHandler.postDelayed(serviceWatchdogRunnable, SERVICE_WATCHDOG_INTERVAL)
+    }
+    
+    /**
+     * Restart the CardEmulationService
+     */
+    private fun restartCardEmulationService() {
+        try {
+            Log.d(TAG, "Restarting CardEmulationService")
+            // First stop any existing service
+            val stopIntent = Intent(context, CardEmulationService::class.java)
+            context.stopService(stopIntent)
+            
+            // Wait a moment before starting again
+            mainHandler.postDelayed({
+                val startIntent = Intent(context, CardEmulationService::class.java)
+                startIntent.action = Intent.ACTION_MAIN
+                context.startService(startIntent)
+                
+                // Re-register listeners after a short delay
+                mainHandler.postDelayed({
+                    setupDataReceiver()
+                }, 500)
+            }, 100)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error restarting service: ${e.message}")
+        }
+    }
+    
+    companion object {
+        // Service watchdog interval (5 minutes)
+        private const val SERVICE_WATCHDOG_INTERVAL = 5 * 60 * 1000L
     }
 } 

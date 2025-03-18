@@ -121,18 +121,22 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
                             Toast.LENGTH_LONG
                         ).show()
                     }
+                    
+                    // If we're in receive mode, ensure the service has our listeners
+                    if (appState == AppState.RECEIVING) {
+                        mainHandler.postDelayed({
+                            transferManager.setupDataReceiver()
+                            transferManager.setCardEmulationMessage(etMessage.text.toString())
+                        }, 100)
+                    }
                 }
                 CardEmulationService.ACTION_SERVICE_DESTROYED -> {
                     Log.d(TAG, "Received SERVICE_DESTROYED broadcast, restarting service")
                     if (appState == AppState.RECEIVING) {
-                        // Restart the service
-                        val serviceIntent = Intent(context, CardEmulationService::class.java)
-                        context.startService(serviceIntent)
-                        
-                        // Re-register listeners after a short delay
+                        // Let the transfer manager handle restarting the service
                         mainHandler.postDelayed({
-                            transferManager.setupDataReceiver()
-                        }, 500)
+                            transferManager.switchToReceiveMode()
+                        }, 200)
                     }
                 }
             }
@@ -635,8 +639,12 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         
         // Update the service with the latest message if in receive mode
         if (appState == AppState.RECEIVING) {
+            // Send a broadcast to trigger listener registration in case the service was recreated
+            val intent = Intent(CardEmulationService.ACTION_REGISTER_LISTENERS)
+            sendBroadcast(intent)
+            
+            // Also use the transfer manager to properly set up the service
             transferManager.setCardEmulationMessage(etMessage.text.toString())
-            // Re-establish the data receiver connection
             transferManager.setupDataReceiver()
         }
         
