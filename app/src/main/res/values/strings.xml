@@ -37,6 +37,9 @@
     <string name="chunked_transfer_error_receiver">Error receiving chunked message: %1$s</string>
     <string name="chunked_transfer_timeout">Transfer timed out. Switching to receive mode.</string>
     <string name="app_launched_by_nfc">App launched by NFC</string>
+    <string name="nfc_tag_detected">NFC tag detected</string>
+    <string name="hce_service_description">NFC Card Emulation Service</string>
+    <string name="ndef_aid_group">NDEF Tag Emulation</string>
     
     <!-- New strings for ChunkwiseTransferManager -->
     <string name="failed_to_initialize_transfer">Failed to initialize transfer. Waiting for reconnection...</string>

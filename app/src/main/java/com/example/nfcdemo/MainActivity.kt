@@ -11,6 +11,7 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.nfc.NfcAdapter
 import android.nfc.NfcAdapter.ReaderCallback
+import android.nfc.NdefMessage
 import android.nfc.Tag
 import android.nfc.TagLostException
 import android.nfc.tech.IsoDep
@@ -465,11 +466,55 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         
         // Save the new intent to replace the old one
         setIntent(intent)
+
+        // TODO: Handle this later in the intent manager
+        handleNfcIntent(intent)
         
         // Delegate to the intent manager
         intentManager.handleNewIntent(intent, appState, etMessage)
     }
     
+    private fun handleNfcIntent(intent: Intent) {
+        Log.d(TAG, "MainActivity handleNfcIntent ${intent.action}")
+        if (NfcAdapter.ACTION_NDEF_DISCOVERED == intent.action) {
+            val rawMessages = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
+            if (rawMessages != null) {
+                val messages = rawMessages.map { it as NdefMessage }
+                // Process NDEF messages
+                for (message in messages) {
+                    for (record in message.records) {
+                        if (record.toMimeType()?.contentEquals("text/plain") == true) {
+                            val payload = record.payload
+                            // Get the text encoding
+                            val textEncoding = if ((payload[0].toInt() and 128) == 0) { // Bit 7 signals encoding. 0 for UTF-8, 1 for UTF-16.
+                                Charset.forName("UTF-8")
+                            } else {
+                                Charset.forName("UTF-16")
+                            }
+                            // Get the language code
+                            val languageCodeLength = payload[0].toInt() and 0x3f // Bits 5..0 reserve for language code length.
+                            // Get the actual text data by decoding the payload
+                            val textData = String(payload, languageCodeLength + 1, payload.size - languageCodeLength - 1, textEncoding)
+                            Log.d(TAG, "Received NDEF message: $textData")
+                            // Save and display the received data in your chat
+                            saveAndAddMessage(textData, false)
+                        }
+                    }
+                }
+            } else {
+                // Tag might not contain NDEF data
+                val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
+                if (tag != null) {
+                    Log.d(TAG, "Received NFC tag without NDEF data")
+                    Toast.makeText(this, getString(R.string.nfc_tag_detected), Toast.LENGTH_SHORT).show()
+                }
+            }
+        } else if (NfcAdapter.ACTION_TAG_DISCOVERED == intent.action || NfcAdapter.ACTION_TECH_DISCOVERED == intent.action) {
+            // Handle other NFC intents if needed, e.g., for your HCE communication
+            intent?.let { super.onNewIntent(it) }
+        }
+    }
+
     /**
      * Vibrate on message sent/received
      */

@@ -23,9 +23,11 @@ import com.example.nfcdemo.data.AppConstants
 import com.example.nfcdemo.data.MessageDbHelper
 import com.example.nfcdemo.data.SettingsContract
 import com.example.nfcdemo.nfc.MessageData
+import com.example.nfcdemo.nfc.NdefProcessor
 import com.example.nfcdemo.nfc.NfcProtocol
 import java.nio.charset.Charset
 import org.json.JSONObject
+import java.util.Arrays
 
 /**
  * Host Card Emulation service for NFC communication.
@@ -72,8 +74,16 @@ class CardEmulationService : HostApduService() {
         private const val DELAYED_MESSAGE_DELIVERY_MS = 1000L // 1 second
     }
     
+    // NDEF processor for handling NDEF commands
+    private val ndefProcessor = NdefProcessor()
+    
     // Message to be shared when requested
     var messageToShare: String = ""
+        set(value) {
+            field = value
+            // Also update the NDEF processor's message
+            ndefProcessor.setMessage(value)
+        }
     
     // Callback to notify MainActivity when data is received
     var onDataReceivedListener: ((MessageData) -> Unit)? = null
@@ -165,7 +175,9 @@ class CardEmulationService : HostApduService() {
         startHeartbeat()
         
         // Broadcast that the service has started
-        sendBroadcast(Intent(ACTION_SERVICE_STARTED))
+        val intent = Intent(ACTION_SERVICE_STARTED)
+        intent.setPackage(packageName)
+        sendBroadcast(intent)
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -200,7 +212,9 @@ class CardEmulationService : HostApduService() {
         }
         
         // Broadcast that the service is being destroyed
-        sendBroadcast(Intent(ACTION_SERVICE_DESTROYED))
+        val intent = Intent(ACTION_SERVICE_DESTROYED)
+        intent.setPackage(packageName)
+        sendBroadcast(intent)
         
         // Clear the static instance
         instance = null
@@ -344,6 +358,18 @@ class CardEmulationService : HostApduService() {
             return NfcProtocol.hexStringToByteArray(STATUS_FAILED)
         }
 
+        // First, try to process as an NDEF command
+        try {
+            // Check if this is an NDEF command - some basic pattern matching
+            if (isNdefCommand(commandApdu)) {
+                return ndefProcessor.processCommandApdu(commandApdu)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error processing NDEF command: ${e.message}")
+        }
+
+        // If not an NDEF command, process as a regular NFC command
+        
         // Check if this is a SELECT AID command
         if (isSelectAidCommand(commandApdu)) {
             Log.d(TAG, "Received SELECT AID command")
@@ -387,6 +413,17 @@ class CardEmulationService : HostApduService() {
                 NfcProtocol.UNKNOWN_CMD_SW
             }
         }
+    }
+    
+    /**
+     * Determine if the command is NDEF-related
+     */
+    private fun isNdefCommand(commandApdu: ByteArray): Boolean {
+        // This is a simple heuristic to identify NDEF commands
+        // Better pattern matching could be implemented if needed
+        return commandApdu.size >= 4 && 
+               (commandApdu[0] == 0x00.toByte() && commandApdu[1] == 0xA4.toByte()) ||
+               (commandApdu[0] == 0x00.toByte() && commandApdu[1] == 0xB0.toByte())
     }
     
     /**
@@ -654,13 +691,6 @@ class CardEmulationService : HostApduService() {
                command[3] == NfcProtocol.SELECT_APDU_HEADER[3] &&
                command[4] == AID.size.toByte() &&
                command.sliceArray(5 until 5 + AID.size).contentEquals(AID)
-    }
-    
-    /**
-     * Convert a byte array to a hex string
-     */
-    private fun ByteArray.toHex(): String {
-        return NfcProtocol.byteArrayToHex(this)
     }
 
     /**
