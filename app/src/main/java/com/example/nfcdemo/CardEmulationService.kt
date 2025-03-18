@@ -81,8 +81,6 @@ class CardEmulationService : HostApduService() {
     var messageToShare: String = ""
         set(value) {
             field = value
-            // Also update the NDEF processor's message
-            ndefProcessor.setMessage(value)
         }
     
     // Callback to notify MainActivity when data is received
@@ -158,13 +156,7 @@ class CardEmulationService : HostApduService() {
             chunkSize = 0
         }
     }
-    
-    /**
-     * Get the last received NDEF message, if any
-     */
-    fun getLastReceivedNdefMessage(): String? {
-        return ndefProcessor.getReceivedMessage()
-    }
+
     
     override fun onCreate() {
         super.onCreate()
@@ -354,7 +346,7 @@ class CardEmulationService : HostApduService() {
     }
     
     override fun processCommandApdu(commandApdu: ByteArray, extras: Bundle?): ByteArray {
-        Log.d(TAG, "Received APDU: ${NfcProtocol.byteArrayToHex(commandApdu)}")
+        Log.d(TAG, "> Received APDU: ${NfcProtocol.byteArrayToHex(commandApdu)}")
 
         // Check if background NFC is enabled
         val dbHelper = MessageDbHelper(this)
@@ -373,39 +365,11 @@ class CardEmulationService : HostApduService() {
         try {
             // Check if this is an NDEF command - some basic pattern matching
             if (isNdefCommand(commandApdu)) {
-                Log.d(TAG, "Processing NDEF command")
                 val response = ndefProcessor.processCommandApdu(commandApdu)
-                
-                // Check if we received a new NDEF message after processing
-                val ndefMessage = ndefProcessor.getReceivedMessage()
-                if (ndefMessage != null) {
-                    // Notify listener about the received NDEF message
-                    Log.d(TAG, "Notifying listener about received NDEF message: $ndefMessage")
-                    
-                    // Check if we should bring the app to the foreground
-                    val bringToForeground = dbHelper.getBooleanSetting(
-                        SettingsContract.SettingsEntry.KEY_BRING_TO_FOREGROUND,
-                        AppConstants.DefaultSettings.BRING_TO_FOREGROUND
-                    )
-                    
-                    if (bringToForeground && !isAppInForeground()) {
-                        // Create an intent to launch the MainActivity
-                        val intent = Intent(this, MainActivity::class.java).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                            putExtra("from_ndef_receive", true)
-                            putExtra("ndef_message", ndefMessage)
-                        }
-                        startActivity(intent)
-                    }
-                    
-                    // Notify listeners
-                    onNdefMessageReceivedListener?.invoke(ndefMessage)
-                }
-                
-                return response
-            } else {
-                Log.d(TAG, "Not an NDEF command")
-            }
+                if (response != NdefProcessor.NDEF_RESPONSE_ERROR) {
+                    return response
+                } 
+            } 
         } catch (e: Exception) {
             Log.e(TAG, "Error processing NDEF command: ${e.message}")
             return NfcProtocol.UNKNOWN_CMD_SW

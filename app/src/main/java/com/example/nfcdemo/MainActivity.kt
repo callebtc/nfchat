@@ -510,6 +510,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
                 }
             }
         } else if (NfcAdapter.ACTION_TAG_DISCOVERED == intent.action || NfcAdapter.ACTION_TECH_DISCOVERED == intent.action) {
+            Log.d(TAG, "Handing NFC intent: ${intent.action}")
             // Handle other NFC intents if needed, e.g., for your HCE communication
             intent?.let { super.onNewIntent(it) }
         }
