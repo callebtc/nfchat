@@ -38,23 +38,32 @@ class NdefProcessor {
             0x04,            // T (NDEF File Control TLV)
             0x06,            // L
             0xE1.toByte(), 0x04.toByte(), // File ID
-            0x00, 0xFF.toByte(),          // Max NDEF size
+            0x70.toByte(), 0xFF.toByte(),  // Size: 0x70FF (28,671) bytes
             0x00,            // Read access (unrestricted)
             0x00             // Write access (unrestricted)
         )
 
         // Step 3: Select NDEF File: 00 A4 00 0C 02 E1 04
         private val NDEF_FILE_ID = byteArrayOf(0xE1.toByte(), 0x04.toByte())
+
+        // example NDEF message: "hello"
         private val NDEF_FILE = byteArrayOf(
             // 0x000B = total NDEF length (2 bytes)
             // D1 = NDEF record header (MB=1, ME=1, TNF=0x01)
             // 01 = type length (T)
-            // 07 = payload length
+            // 09 = payload length
             // 54 = 'T' (type for Text)
             // 02 65 6E = language code "en"
             // 68 65 6C 6C 6F = "hello"
-            0x00, 0x09, 0xD1.toByte(), 0x01, 0x05, 0x54, 0x02, 0x68, 0x65, 0x6C, 0x6C, 0x6F
+            0x00, 0x0D, // NDEF length
+            0xD1.toByte(), // NDEF record header
+            0x01, // type length
+            0x09, // payload length
+            0x54, // 'T'
+            0x02, 0x65, 0x6E, // "en"
+            0x02, 0x68, 0x65, 0x6C, 0x6C, 0x6F // "hello"
         )
+
         
         // Step 4: Read Binary: 00 B0 offset_MSB offset_LSB length
         private val NDEF_READ_BINARY_HEADER = byteArrayOf(0x00.toByte(), 0xB0.toByte())
@@ -75,6 +84,26 @@ class NdefProcessor {
     private var ndefData = ByteArray(NDEF_MAX_MESSAGE_SIZE)
     private var selectedFile: ByteArray? = null
 
+    private fun createNdefMessage(message: String): ByteArray {
+        val payload = message.toByteArray()
+        val language = byteArrayOf(0x02) + "en".toByteArray()
+        val payloadLength = payload.size + language.size
+        val type = "T".toByteArray()
+        val typeLength = type.size
+        val ndefLength = 3 + typeLength + payloadLength
+        val ndefData = byteArrayOf(
+            0x00, ndefLength.toByte(), // NDEF length
+            0xD1.toByte(), // NDEF record header
+            typeLength.toByte(), // type length
+            payloadLength.toByte(), // payload length
+            *type, // 'T'
+            *language, // "en"
+            *payload // message
+        )
+        Log.d(TAG, "NdefProcessor: Created NDEF message: ${byteArrayToHex(ndefData)}")
+        return ndefData
+        
+    }   
 
     /**
      * Handles SELECT FILE commands
@@ -88,7 +117,8 @@ class NdefProcessor {
                 NDEF_RESPONSE_OK
             }
             Arrays.equals(fileId, NDEF_FILE_ID) -> {
-                selectedFile = NDEF_FILE
+                // selectedFile = NDEF_FILE
+                selectedFile = createNdefMessage("hello")
                 Log.d(TAG, "NdefProcessor: NDEF File selected")
                 NDEF_RESPONSE_OK
             }
