@@ -1,6 +1,7 @@
 package com.example.nfcdemo
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.ClipboardManager
@@ -615,9 +616,31 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         }
     }
 
+    /**
+     * Check if the CardEmulationService is running.
+     * @param serviceClass The class of the service to check.
+     * @return True if the service is running, false otherwise.
+     */
+    private fun isServiceRunning(serviceClass: Class<*>): Boolean {
+        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        for (service in manager.getRunningServices(Int.MAX_VALUE)) {
+            if (serviceClass.name == service.service.className) {
+                return true
+            }
+        }
+        return false
+    }
+
     override fun onResume() {
         Log.d(TAG, "MainActivity onResume")
         super.onResume()
+
+        // Check if the CardEmulationService is running and start it if not
+        if (!isServiceRunning(CardEmulationService::class.java)) {
+            Log.d(TAG, "CardEmulationService is not running, starting it")
+            val serviceIntent = Intent(this, CardEmulationService::class.java)
+            startService(serviceIntent)
+        }
         
         // Register for background NFC setting changes
         val settingsFilter = IntentFilter(SettingsActivity.ACTION_BACKGROUND_NFC_SETTING_CHANGED)
