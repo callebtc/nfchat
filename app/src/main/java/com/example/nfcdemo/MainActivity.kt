@@ -708,7 +708,9 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         // Update the service with the latest message if in receive mode
         if (appState == AppState.RECEIVING) {
             // Send a broadcast to trigger listener registration in case the service was recreated
-            val intent = Intent(CardEmulationService.ACTION_REGISTER_LISTENERS)
+            val intent = Intent(CardEmulationService.ACTION_REGISTER_LISTENERS).apply {
+                setPackage(packageName)
+            }
             sendBroadcast(intent)
             
             // Also use the transfer manager to properly set up the service

@@ -343,8 +343,10 @@ class SettingsActivity : Activity() {
                 // packageManager.setComponentEnabledSetting(componentName, newState, PackageManager.DONT_KILL_APP)
                 
                 // Broadcast an intent to notify the app about the setting change
-                val intent = Intent(ACTION_BACKGROUND_NFC_SETTING_CHANGED)
-                intent.putExtra(EXTRA_BACKGROUND_NFC_ENABLED, enabled)
+                val intent = Intent(ACTION_BACKGROUND_NFC_SETTING_CHANGED).apply {
+                    putExtra(EXTRA_BACKGROUND_NFC_ENABLED, enabled)
+                    setPackage(packageName)
+                }
                 sendBroadcast(intent)
                 
                 Log.d(TAG, "Sent broadcast to update NFC background behavior: enabled=$enabled")

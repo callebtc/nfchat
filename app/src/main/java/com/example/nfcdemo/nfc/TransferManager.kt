@@ -74,7 +74,9 @@ class TransferManager(private val context: Activity) {
                     mainHandler.postDelayed({
                         setupDataReceiver()
                         // Request the service to deliver any pending messages
-                        val registerIntent = Intent(CardEmulationService.ACTION_REGISTER_LISTENERS)
+                        val registerIntent = Intent(CardEmulationService.ACTION_REGISTER_LISTENERS).apply {
+                            context?.packageName?.let { setPackage(it) }
+                        }
                         context?.sendBroadcast(registerIntent)
                     }, 100)
                 }

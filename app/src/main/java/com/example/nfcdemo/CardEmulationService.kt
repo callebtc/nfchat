@@ -88,6 +88,9 @@ class CardEmulationService : HostApduService() {
     // Callback to notify MainActivity when data is received
     var onDataReceivedListener: ((MessageData) -> Unit)? = null
     
+    // Callback to notify MainActivity when NDEF message is received
+    var onNdefMessageReceivedListener: ((String) -> Unit)? = null
+    
     // Chunked message transfer state
     private var isReceivingChunkedMessage = false
     private var totalChunks = 0
@@ -154,6 +157,13 @@ class CardEmulationService : HostApduService() {
             chunkedMessageBuilder = StringBuilder()
             chunkSize = 0
         }
+    }
+    
+    /**
+     * Get the last received NDEF message, if any
+     */
+    fun getLastReceivedNdefMessage(): String? {
+        return ndefProcessor.getReceivedMessage()
     }
     
     override fun onCreate() {
@@ -312,6 +322,7 @@ class CardEmulationService : HostApduService() {
                 // Broadcast that we're running in a degraded mode
                 val intent = Intent(ACTION_SERVICE_STARTED).apply {
                     putExtra("degraded_mode", true)
+                    setPackage(packageName)
                 }
                 sendBroadcast(intent)
                 isForegroundService = false
@@ -362,10 +373,42 @@ class CardEmulationService : HostApduService() {
         try {
             // Check if this is an NDEF command - some basic pattern matching
             if (isNdefCommand(commandApdu)) {
-                return ndefProcessor.processCommandApdu(commandApdu)
+                Log.d(TAG, "Processing NDEF command")
+                val response = ndefProcessor.processCommandApdu(commandApdu)
+                
+                // Check if we received a new NDEF message after processing
+                val ndefMessage = ndefProcessor.getReceivedMessage()
+                if (ndefMessage != null) {
+                    // Notify listener about the received NDEF message
+                    Log.d(TAG, "Notifying listener about received NDEF message: $ndefMessage")
+                    
+                    // Check if we should bring the app to the foreground
+                    val bringToForeground = dbHelper.getBooleanSetting(
+                        SettingsContract.SettingsEntry.KEY_BRING_TO_FOREGROUND,
+                        AppConstants.DefaultSettings.BRING_TO_FOREGROUND
+                    )
+                    
+                    if (bringToForeground && !isAppInForeground()) {
+                        // Create an intent to launch the MainActivity
+                        val intent = Intent(this, MainActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            putExtra("from_ndef_receive", true)
+                            putExtra("ndef_message", ndefMessage)
+                        }
+                        startActivity(intent)
+                    }
+                    
+                    // Notify listeners
+                    onNdefMessageReceivedListener?.invoke(ndefMessage)
+                }
+                
+                return response
+            } else {
+                Log.d(TAG, "Not an NDEF command")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error processing NDEF command: ${e.message}")
+            return NfcProtocol.UNKNOWN_CMD_SW
         }
 
         // If not an NDEF command, process as a regular NFC command
@@ -375,7 +418,7 @@ class CardEmulationService : HostApduService() {
             Log.d(TAG, "Received SELECT AID command")
             return NfcProtocol.SELECT_OK_SW
         }
-        
+
         // Convert the command to a string
         val commandString = String(commandApdu, Charset.forName("UTF-8"))
         Log.d(TAG, "Command string: $commandString")
@@ -419,11 +462,28 @@ class CardEmulationService : HostApduService() {
      * Determine if the command is NDEF-related
      */
     private fun isNdefCommand(commandApdu: ByteArray): Boolean {
-        // This is a simple heuristic to identify NDEF commands
-        // Better pattern matching could be implemented if needed
-        return commandApdu.size >= 4 && 
-               (commandApdu[0] == 0x00.toByte() && commandApdu[1] == 0xA4.toByte()) ||
-               (commandApdu[0] == 0x00.toByte() && commandApdu[1] == 0xB0.toByte())
+        // Check if command has minimum length for APDU command
+        if (commandApdu.size < 4) return false
+        
+        // Check command type
+        return when {
+            // SELECT Application - 00 A4 04 00 (used for NDEF application selection)
+            commandApdu[0] == 0x00.toByte() && commandApdu[1] == 0xA4.toByte() &&
+            commandApdu[2] == 0x04.toByte() && commandApdu[3] == 0x00.toByte() -> true
+            
+            // SELECT File - 00 A4 00 0C (used for NDEF file selection)
+            commandApdu[0] == 0x00.toByte() && commandApdu[1] == 0xA4.toByte() &&
+            commandApdu[2] == 0x00.toByte() && commandApdu[3] == 0x0C.toByte() -> true
+            
+            // READ BINARY - 00 B0 (used to read NDEF data)
+            commandApdu[0] == 0x00.toByte() && commandApdu[1] == 0xB0.toByte() -> true
+            
+            // UPDATE BINARY - 00 D6 (used to write NDEF data)
+            commandApdu[0] == 0x00.toByte() && commandApdu[1] == 0xD6.toByte() -> true
+            
+            // Otherwise, not an NDEF command
+            else -> false
+        }
     }
     
     /**
