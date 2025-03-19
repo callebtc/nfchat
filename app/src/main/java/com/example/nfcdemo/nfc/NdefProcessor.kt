@@ -76,8 +76,7 @@ class NdefProcessor {
         val NDEF_RESPONSE_ERROR = byteArrayOf(0x6A.toByte(), 0x82.toByte())
 
         
-
-        private const val NDEF_MAX_MESSAGE_SIZE = 254
+        private const val NDEF_MAX_MESSAGE_SIZE = 65536
     }
 
     // set to NDEF_FILE
@@ -174,6 +173,8 @@ class NdefProcessor {
 
         System.arraycopy(data, 0, ndefData, offset, dataLength)
         Log.d(TAG, "NdefProcessor: UPDATE BINARY success, updated ${dataLength} bytes at offset ${offset}")
+        // print string
+        Log.d(TAG, "NdefProcessor: UPDATE BINARY data: ${String(data)}")
 
         return NDEF_RESPONSE_OK
     }
