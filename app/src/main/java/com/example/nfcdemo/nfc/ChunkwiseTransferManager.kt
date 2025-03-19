@@ -522,67 +522,67 @@ class ChunkwiseTransferManager(private val context: Context) {
         return jsonMessage.length > maxChunkSize
     }
     
-    /**
-     * Send a regular (non-chunked) message
-     */
-    fun sendRegularMessage(isoDep: IsoDep, message: String): Boolean {
-        try {
-            // Create a MessageData object with the message content and a unique ID
-            val messageData = MessageData(message)
-            val jsonMessage = messageData.toJson()
+    // /**
+    //  * Send a regular (non-chunked) message
+    //  */
+    // fun sendRegularMessage(isoDep: IsoDep, message: String): Boolean {
+    //     try {
+    //         // Create a MessageData object with the message content and a unique ID
+    //         val messageData = MessageData(message)
+    //         val jsonMessage = messageData.toJson()
             
-            val sendCommand = NfcProtocol.createSendDataCommand(jsonMessage)
-            val sendResult = isoDep.transceive(sendCommand)
+    //         val sendCommand = NfcProtocol.createSendDataCommand(jsonMessage)
+    //         val sendResult = isoDep.transceive(sendCommand)
             
-            if (NfcProtocol.isSuccess(sendResult)) {
-                // Cancel any retry timeout since we succeeded
-                cancelTransferRetryTimeout()
-                isRetryingTransfer = false
+    //         if (NfcProtocol.isSuccess(sendResult)) {
+    //             // Cancel any retry timeout since we succeeded
+    //             cancelTransferRetryTimeout()
+    //             isRetryingTransfer = false
                 
-                mainHandler.post {
-                    onTransferStatusChanged?.invoke(context.getString(R.string.message_sent))
-                    onTransferCompleted?.invoke()
-                }
+    //             mainHandler.post {
+    //                 onTransferStatusChanged?.invoke(context.getString(R.string.message_sent))
+    //                 onTransferCompleted?.invoke()
+    //             }
                 
-                return true
-            } else {
-                // If we're already in retry mode, just log the failure and wait for retry timeout
-                if (isRetryingTransfer) {
-                    Log.e(TAG, "Failed to send message, waiting for retry timeout or reconnection")
-                    return false
-                }
+    //             return true
+    //         } else {
+    //             // If we're already in retry mode, just log the failure and wait for retry timeout
+    //             if (isRetryingTransfer) {
+    //                 Log.e(TAG, "Failed to send message, waiting for retry timeout or reconnection")
+    //                 return false
+    //             }
                 
-                // If retry timeout is disabled (0), immediately show failure
-                if (transferRetryTimeoutMs <= 0) {
-                    mainHandler.post {
-                        onTransferStatusChanged?.invoke(context.getString(R.string.message_send_failed))
-                        onTransferError?.invoke(context.getString(R.string.message_send_failed))
-                    }
-                    return false
-                }
+    //             // If retry timeout is disabled (0), immediately show failure
+    //             if (transferRetryTimeoutMs <= 0) {
+    //                 mainHandler.post {
+    //                     onTransferStatusChanged?.invoke(context.getString(R.string.message_send_failed))
+    //                     onTransferError?.invoke(context.getString(R.string.message_send_failed))
+    //                 }
+    //                 return false
+    //             }
                 
-                // Start retry timeout and wait for reconnection
-                mainHandler.post {
-                    onTransferStatusChanged?.invoke(context.getString(R.string.send_failed_waiting))
-                }
-                startTransferRetryTimeout()
-                return false
-            }
-        } catch (e: IOException) {
-            // Handle communication errors with retry logic
-            handleTagCommunicationError(e)
-            return false
-        } catch (e: TagLostException) {
-            // Handle tag lost errors with retry logic
-            handleTagLostError(e)
-            return false
-        } catch (e: Exception) {
-            // For other exceptions, log and reset
-            Log.e(TAG, "Unexpected error sending message: ${e.message}")
-            resetAndNotifyError("Error: ${e.message}")
-            return false
-        }
-    }
+    //             // Start retry timeout and wait for reconnection
+    //             mainHandler.post {
+    //                 onTransferStatusChanged?.invoke(context.getString(R.string.send_failed_waiting))
+    //             }
+    //             startTransferRetryTimeout()
+    //             return false
+    //         }
+    //     } catch (e: IOException) {
+    //         // Handle communication errors with retry logic
+    //         handleTagCommunicationError(e)
+    //         return false
+    //     } catch (e: TagLostException) {
+    //         // Handle tag lost errors with retry logic
+    //         handleTagLostError(e)
+    //         return false
+    //     } catch (e: Exception) {
+    //         // For other exceptions, log and reset
+    //         Log.e(TAG, "Unexpected error sending message: ${e.message}")
+    //         resetAndNotifyError("Error: ${e.message}")
+    //         return false
+    //     }
+    // }
     
     /**
      * Handle communication errors with the NFC tag
