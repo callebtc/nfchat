@@ -206,30 +206,27 @@ class NdefProcessor {
         // Prevent overflow
         if (offset + dataLength > ndefData.size) return NDEF_RESPONSE_ERROR
 
-        System.arraycopy(data, 0, ndefData, offset, dataLength)
+        
         Log.d(
                 TAG,
                 "NdefProcessor: UPDATE BINARY success, updated ${dataLength} bytes at offset ${offset}"
         )
+        Log.d(TAG, "NdefProcessor: UPDATE BINARY data: ${String(data)}")
+        Log.d(TAG, "NdefProcessor: UPDATE BINARY data: ${byteArrayToHex(data)}")
 
-        // Try to extract and process the message
+        // store the data
+        System.arraycopy(data, 0, ndefData, offset, dataLength)
+        
+
+        // If the transfer is complete
         try {
-            // If offset is 0, this might be the start of an NDEF message
-            if (offset == 0 && dataLength > 2) {
+            // If the transfer is complete, process the message
+            if (offset == 0 && dataLength == 2) {
                 // NDEF messages start with a length field
-                val ndefLength = ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)
-
+                val ndefLength = ((ndefData[0].toInt() and 0xFF) shl 8) or (ndefData[1].toInt() and 0xFF)
                 // If we have the complete message already
-                if (dataLength >= ndefLength + 2) {
-                    processReceivedNdefMessage(data)
-                }
-            }
-            // If we're writing elsewhere in the message, try to process the whole thing
-            else if (offset + dataLength > 2) {
-                val totalLength =
-                        ((ndefData[0].toInt() and 0xFF) shl 8) or (ndefData[1].toInt() and 0xFF)
-                if (offset + dataLength >= totalLength + 2) {
-                    processReceivedNdefMessage(ndefData.sliceArray(0 until totalLength + 2))
+                if (ndefLength + 2 <= ndefData.size) {
+                    processReceivedNdefMessage(ndefData.sliceArray(2 until 2 + ndefLength))
                 }
             }
         } catch (e: Exception) {
@@ -241,15 +238,24 @@ class NdefProcessor {
 
     /** Process a received NDEF message and extract the text content */
     private fun processReceivedNdefMessage(ndefData: ByteArray) {
+        Log.d(TAG, "processReceivedNdefMessage: Processing received NDEF message of length ${ndefData.size}")
+        // hex dump of first 64 bytes
+        Log.d(TAG, "processReceivedNdefMessage: ${ndefData.sliceArray(0 until 64).joinToString(" ") { "%02X".format(it) }}")
+        // output: 00 0D D1 01 09 54 02 65 6E 69 50 68 6F6E650000000000000000000
         try {
             // Simple parsing of NDEF Text Record (TNF=1, RTD_TEXT)
-            if (ndefData.size > 7 && ndefData[2].toInt() == 0xD1 && ndefData[5].toInt() == 0x54) {
+            // log ndefData[2] and ndefData[5] to see the TNF and RTD
+            Log.d(TAG, "processReceivedNdefMessage: ndefData[2]: ${ndefData[2].toInt()}, ndefData[5]: ${ndefData[5].toInt()}")
+            // this doesn't work, we instead get TNF: -47, RTD: 84
+            // extract the word "iPhone" from the message above
+            if ((ndefData[2].toInt() and 0xFF) == 0xD1 && (ndefData[5].toInt() and 0xFF) == 0x54) {
                 // Get the payload length
                 val payloadLength = ndefData[4].toInt() and 0xFF
 
                 // Skip language code
                 val languageCodeLength = ndefData[6].toInt() and 0xFF
                 val textStart = 7 + languageCodeLength
+                Log.d(TAG, "processReceivedNdefMessage: payloadLength: $payloadLength, languageCodeLength: $languageCodeLength, textStart: $textStart")
 
                 // Extract the text
                 if (textStart < ndefData.size &&
@@ -268,22 +274,25 @@ class NdefProcessor {
                     onNdefMessageReceived?.invoke(messageData)
                 }
             } else {
-                // Try to extract as JSON in case it's formatted that way
-                val textBytes = ndefData.sliceArray(2 until ndefData.size)
-                val text = String(textBytes)
-
-                // Check if it's a valid JSON and contains our expected format
-                if (MessageData.isValidJson(text)) {
-                    val messageData = MessageData.fromJson(text)
-                    if (messageData != null) {
-                        Log.d(
-                                TAG,
-                                "NdefProcessor: Extracted JSON from NDEF message: ${messageData.content}"
-                        )
-                        onNdefMessageReceived?.invoke(messageData)
-                    }
-                }
+                Log.d(TAG, "NdefProcessor: NDEF message is not a Text Record")
             }
+
+            //     // Try to extract as JSON in case it's formatted that way
+            //     val textBytes = ndefData.sliceArray(2 until ndefData.size)
+            //     val text = String(textBytes)
+
+            //     // Check if it's a valid JSON and contains our expected format
+            //     if (MessageData.isValidJson(text)) {
+            //         val messageData = MessageData.fromJson(text)
+            //         if (messageData != null) {
+            //             Log.d(
+            //                     TAG,
+            //                     "NdefProcessor: Extracted JSON from NDEF message: ${messageData.content}"
+            //             )
+            //             onNdefMessageReceived?.invoke(messageData)
+            //         }
+            //     }
+            // }
         } catch (e: Exception) {
             Log.e(TAG, "Error extracting text from NDEF message: ${e.message}")
         }

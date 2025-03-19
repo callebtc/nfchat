@@ -394,10 +394,10 @@ class TransferManager(private val context: Activity) {
                 } else if (receivedChunks == totalChunks) {
                     // This is the final notification (CHUNK_COMPLETE)
                     Log.d(TAG, "Chunk receive completed: $receivedChunks/$totalChunks")
-                    // Update status text
-                    onStatusChanged?.invoke(
-                            context.getString(R.string.receiving_chunk, receivedChunks, totalChunks)
-                    )
+                    // // Update status text
+                    // onStatusChanged?.invoke(
+                    //         context.getString(R.string.receiving_chunk, receivedChunks, totalChunks)
+                    // )
                     // Notify about progress
                     chunkwiseTransferManager.onChunkReceiveProgress?.invoke(
                             receivedChunks,
@@ -575,6 +575,7 @@ class TransferManager(private val context: Activity) {
 
     /** Handle tag discovered event */
     fun handleTagDiscovered(tag: Tag) {
+        Log.d(TAG, "handleTagDiscovered: Tag discovered: ${tag.id}")
         val isoDep = IsoDep.get(tag) ?: return
 
         try {
@@ -644,7 +645,7 @@ class TransferManager(private val context: Activity) {
 
     /** Request data from an NFC tag */
     private fun requestDataFromTag(isoDep: IsoDep) {
-        Log.d(TAG, "Requesting data from tag")
+        Log.d(TAG, "requestDataFromTag: Requesting data from tag")
         val getCommand = NfcProtocol.createGetDataCommand()
         val getResult = isoDep.transceive(getCommand)
 
@@ -681,6 +682,7 @@ class TransferManager(private val context: Activity) {
 
     /** Send a regular (non-chunked) message */
     private fun sendRegularMessage(isoDep: IsoDep, message: String) {
+        Log.d(TAG, "sendRegularMessage: Sending regular message")
         try {
             // Create a MessageData object with the message content and a unique ID
             val messageData = MessageData(message)

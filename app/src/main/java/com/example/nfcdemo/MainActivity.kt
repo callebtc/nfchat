@@ -382,6 +382,8 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
                 // Hide the progress bar
                 AnimationUtils.hideProgressBar(chunkProgressBar)
                 Log.d(TAG, "Chunk transfer completed")
+                // switch to receive mode
+                transferManager.switchToReceiveMode()
             }
         }
     }
