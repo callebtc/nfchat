@@ -111,6 +111,7 @@ class IntentManager(
      * Handle NFC intents, whether from foreground dispatch or from app launch
      */
     fun handleNfcIntent(intent: Intent, appState: AppState) {
+        Log.d(TAG, "IntentManager: Handling NFC intent: ${intent.action}")
         // Check if the app was launched from background and if background NFC is disabled
         if (!isAppInForeground(intent) && !backgroundNfcEnabled) {
             Log.d(TAG, "Ignoring NFC intent because background NFC is disabled")
@@ -143,9 +144,9 @@ class IntentManager(
                 transferManager.onVibrate?.invoke(100)
                 
                 // Show a toast to indicate the app was launched by NFC
-                if (intent.action != NfcAdapter.ACTION_TECH_DISCOVERED) {
-                    Toast.makeText(context, context.getString(R.string.app_launched_by_nfc), Toast.LENGTH_SHORT).show()
-                }
+                // if (intent.action != NfcAdapter.ACTION_TECH_DISCOVERED) {
+                //     Toast.makeText(context, context.getString(R.string.app_launched_by_nfc), Toast.LENGTH_SHORT).show()
+                // }
             }
         } ?: run {
             Log.e(TAG, "No tag found in intent")

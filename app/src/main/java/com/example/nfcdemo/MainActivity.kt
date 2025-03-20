@@ -242,6 +242,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
 
         // Handle incoming share intents first
         if (isShareIntent) {
+            Log.d(TAG, "App launched via share intent: ${intent?.action}")
             intentManager.handleIncomingShareIntent(intent, appState, etMessage)
         }
         // Handle NFC intents if the app was launched by an NFC discovery
@@ -536,7 +537,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         } else if (NfcAdapter.ACTION_TAG_DISCOVERED == intent.action ||
                         NfcAdapter.ACTION_TECH_DISCOVERED == intent.action
         ) {
-            Log.d(TAG, "Handing NFC intent: ${intent.action}")
+            Log.d(TAG, "Handling NFC intent: ${intent.action}")
             // Handle other NFC intents if needed, e.g., for your HCE communication
             intent?.let { super.onNewIntent(it) }
         }
