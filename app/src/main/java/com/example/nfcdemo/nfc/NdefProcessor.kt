@@ -103,6 +103,7 @@ class NdefProcessor {
 
     // set to NDEF_FILE or dynamically created message
     private var ndefData = ByteArray(NDEF_MAX_MESSAGE_SIZE)
+    private var receivedMessage: String = ""
     private var selectedFile: ByteArray? = null
 
     /** Set the message to be sent when in write mode */
@@ -318,6 +319,7 @@ class NdefProcessor {
     
             val textBytes = ndefData.sliceArray(textStart until textStart + textLength)
             val text = String(textBytes)
+            receivedMessage = text
             Log.d(TAG, "Extracted text: $text")
     
             val messageData = MessageData(text)
@@ -363,6 +365,10 @@ class NdefProcessor {
 
         Log.d(TAG, "NdefProcessor: Invalid APDU received: ${byteArrayToHex(commandApdu)}")
         return NDEF_RESPONSE_ERROR
+    }
+
+    fun getReceivedMessage(): String {
+        return receivedMessage
     }
 
     /** Convert a byte array to a hex string */
