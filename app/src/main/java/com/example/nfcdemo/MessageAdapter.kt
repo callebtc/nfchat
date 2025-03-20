@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.text.Layout
 import android.text.Selection
+import android.text.Spannable
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.TextPaint

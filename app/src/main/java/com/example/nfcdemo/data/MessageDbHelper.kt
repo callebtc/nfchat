@@ -49,6 +49,9 @@ class MessageDbHelper(context: Context, dbName: String? = DATABASE_NAME) :
         private val SQL_DELETE_SETTINGS_TABLE = "DROP TABLE IF EXISTS ${SettingsContract.SettingsEntry.TABLE_NAME}"
     }
 
+    // Lock object for synchronization
+    private val dbLock = Object()
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(SQL_CREATE_MESSAGES_TABLE)
         db.execSQL(SQL_CREATE_SETTINGS_TABLE)
@@ -213,99 +216,103 @@ class MessageDbHelper(context: Context, dbName: String? = DATABASE_NAME) :
      * Insert a new message into the database
      */
     fun insertMessage(message: MessageAdapter.Message): Long {
-        val db = writableDatabase
-        
-        val values = ContentValues().apply {
-            put(MessageContract.MessageEntry.COLUMN_CONTENT, message.content)
-            put(MessageContract.MessageEntry.COLUMN_MESSAGE_ID, message.messageId)
-            put(MessageContract.MessageEntry.COLUMN_IS_SENT, if (message.isSent) 1 else 0)
-            put(MessageContract.MessageEntry.COLUMN_IS_DELIVERED, if (message.isDelivered) 1 else 0)
-            put(MessageContract.MessageEntry.COLUMN_TIMESTAMP, message.timestamp.time)
+        synchronized(dbLock) {
+            val db = writableDatabase
+            try {
+                val values = ContentValues().apply {
+                    put(MessageContract.MessageEntry.COLUMN_CONTENT, message.content)
+                    put(MessageContract.MessageEntry.COLUMN_MESSAGE_ID, message.messageId)
+                    put(MessageContract.MessageEntry.COLUMN_IS_SENT, if (message.isSent) 1 else 0)
+                    put(MessageContract.MessageEntry.COLUMN_IS_DELIVERED, if (message.isDelivered) 1 else 0)
+                    put(MessageContract.MessageEntry.COLUMN_TIMESTAMP, message.timestamp.time)
+                }
+                return db.insert(MessageContract.MessageEntry.TABLE_NAME, null, values)
+            } finally {
+                db.close()
+            }
         }
-        
-        return db.insert(MessageContract.MessageEntry.TABLE_NAME, null, values)
     }
 
     /**
      * Update a message's delivery status
      */
     fun updateMessageDeliveryStatus(messageId: Long, isDelivered: Boolean): Int {
-        val db = writableDatabase
-        
-        val values = ContentValues().apply {
-            put(MessageContract.MessageEntry.COLUMN_IS_DELIVERED, if (isDelivered) 1 else 0)
+        synchronized(dbLock) {
+            val db = writableDatabase
+            try {
+                val values = ContentValues().apply {
+                    put(MessageContract.MessageEntry.COLUMN_IS_DELIVERED, if (isDelivered) 1 else 0)
+                }
+                return db.update(
+                    MessageContract.MessageEntry.TABLE_NAME,
+                    values,
+                    "${BaseColumns._ID} = ?",
+                    arrayOf(messageId.toString())
+                )
+            } finally {
+                db.close()
+            }
         }
-        
-        return db.update(
-            MessageContract.MessageEntry.TABLE_NAME,
-            values,
-            "${BaseColumns._ID} = ?",
-            arrayOf(messageId.toString())
-        )
     }
 
     /**
      * Get the most recent messages, limited by count
      */
-    fun getRecentMessages(limit: Int = 100): List<MessageAdapter.Message> {
-        val db = readableDatabase
-        
-        val projection = arrayOf(
-            BaseColumns._ID,
-            MessageContract.MessageEntry.COLUMN_CONTENT,
-            MessageContract.MessageEntry.COLUMN_MESSAGE_ID,
-            MessageContract.MessageEntry.COLUMN_IS_SENT,
-            MessageContract.MessageEntry.COLUMN_IS_DELIVERED,
-            MessageContract.MessageEntry.COLUMN_TIMESTAMP
-        )
-        
-        val sortOrder = "${MessageContract.MessageEntry.COLUMN_TIMESTAMP} ASC"
-        
-        val cursor = db.query(
-            MessageContract.MessageEntry.TABLE_NAME,
-            projection,
-            null,
-            null,
-            null,
-            null,
-            sortOrder,
-            limit.toString()
-        )
-        
-        val messages = mutableListOf<MessageAdapter.Message>()
-        
-        with(cursor) {
-            while (moveToNext()) {
-                val content = getString(getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_CONTENT))
-                val messageId = getString(getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_MESSAGE_ID))
-                val isSent = getInt(getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_IS_SENT)) == 1
-                val isDelivered = getInt(getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_IS_DELIVERED)) == 1
-                val timestamp = getLong(getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_TIMESTAMP))
-                
-                messages.add(
-                    MessageAdapter.Message(
-                        content = content,
-                        messageId = messageId,
-                        isSent = isSent,
-                        isDelivered = isDelivered,
-                        timestamp = Date(timestamp)
-                    )
+    fun getRecentMessages(limit: Int): List<MessageAdapter.Message> {
+        synchronized(dbLock) {
+            val db = readableDatabase
+            try {
+                val projection = arrayOf(
+                    BaseColumns._ID,
+                    MessageContract.MessageEntry.COLUMN_CONTENT,
+                    MessageContract.MessageEntry.COLUMN_MESSAGE_ID,
+                    MessageContract.MessageEntry.COLUMN_IS_SENT,
+                    MessageContract.MessageEntry.COLUMN_IS_DELIVERED,
+                    MessageContract.MessageEntry.COLUMN_TIMESTAMP
                 )
+                
+                val sortOrder = "${MessageContract.MessageEntry.COLUMN_TIMESTAMP} ASC"
+                
+                val cursor = db.query(
+                    MessageContract.MessageEntry.TABLE_NAME,
+                    projection,
+                    null,
+                    null,
+                    null,
+                    null,
+                    sortOrder,
+                    limit.toString()
+                )
+                
+                val messages = mutableListOf<MessageAdapter.Message>()
+                
+                cursor.use {
+                    while (it.moveToNext()) {
+                        val content = it.getString(it.getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_CONTENT))
+                        val messageId = it.getString(it.getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_MESSAGE_ID))
+                        val isSent = it.getInt(it.getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_IS_SENT)) == 1
+                        val isDelivered = it.getInt(it.getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_IS_DELIVERED)) == 1
+                        val timestamp = it.getLong(it.getColumnIndexOrThrow(MessageContract.MessageEntry.COLUMN_TIMESTAMP))
+                        
+                        messages.add(
+                            MessageAdapter.Message(
+                                content = content,
+                                messageId = messageId,
+                                isSent = isSent,
+                                isDelivered = isDelivered,
+                                timestamp = Date(timestamp)
+                            )
+                        )
+                    }
+                }
+                
+                return messages
+            } finally {
+                db.close()
             }
         }
-        cursor.close()
-        
-        return messages
     }
 
-    /**
-     * Delete all messages from the database
-     */
-    fun clearAllMessages(): Int {
-        val db = writableDatabase
-        return db.delete(MessageContract.MessageEntry.TABLE_NAME, null, null)
-    }
-    
     /**
      * Get a setting value by key
      * @param key The setting key
@@ -313,32 +320,36 @@ class MessageDbHelper(context: Context, dbName: String? = DATABASE_NAME) :
      * @return The setting value or defaultValue if not found
      */
     fun getSetting(key: String, defaultValue: String): String {
-        val db = readableDatabase
-        
-        val projection = arrayOf(SettingsContract.SettingsEntry.COLUMN_VALUE)
-        val selection = "${SettingsContract.SettingsEntry.COLUMN_KEY} = ?"
-        val selectionArgs = arrayOf(key)
-        
-        val cursor = db.query(
-            SettingsContract.SettingsEntry.TABLE_NAME,
-            projection,
-            selection,
-            selectionArgs,
-            null,
-            null,
-            null
-        )
-        
-        var value = defaultValue
-        
-        with(cursor) {
-            if (moveToFirst()) {
-                value = getString(getColumnIndexOrThrow(SettingsContract.SettingsEntry.COLUMN_VALUE))
+        synchronized(dbLock) {
+            val db = readableDatabase
+            try {
+                val projection = arrayOf(SettingsContract.SettingsEntry.COLUMN_VALUE)
+                val selection = "${SettingsContract.SettingsEntry.COLUMN_KEY} = ?"
+                val selectionArgs = arrayOf(key)
+                
+                val cursor = db.query(
+                    SettingsContract.SettingsEntry.TABLE_NAME,
+                    projection,
+                    selection,
+                    selectionArgs,
+                    null,
+                    null,
+                    null
+                )
+                
+                var value = defaultValue
+                
+                cursor.use {
+                    if (it.moveToFirst()) {
+                        value = it.getString(it.getColumnIndexOrThrow(SettingsContract.SettingsEntry.COLUMN_VALUE))
+                    }
+                }
+                
+                return value
+            } finally {
+                db.close()
             }
         }
-        cursor.close()
-        
-        return value
     }
     
     /**
@@ -359,26 +370,31 @@ class MessageDbHelper(context: Context, dbName: String? = DATABASE_NAME) :
      * @return The number of rows affected
      */
     fun setSetting(key: String, value: String): Long {
-        val db = writableDatabase
-        
-        val values = ContentValues().apply {
-            put(SettingsContract.SettingsEntry.COLUMN_KEY, key)
-            put(SettingsContract.SettingsEntry.COLUMN_VALUE, value)
-        }
-        
-        // Try to update first
-        val rowsAffected = db.update(
-            SettingsContract.SettingsEntry.TABLE_NAME,
-            values,
-            "${SettingsContract.SettingsEntry.COLUMN_KEY} = ?",
-            arrayOf(key)
-        )
-        
-        // If no rows were updated, insert a new row
-        return if (rowsAffected > 0) {
-            rowsAffected.toLong()
-        } else {
-            db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, values)
+        synchronized(dbLock) {
+            val db = writableDatabase
+            try {
+                val values = ContentValues().apply {
+                    put(SettingsContract.SettingsEntry.COLUMN_KEY, key)
+                    put(SettingsContract.SettingsEntry.COLUMN_VALUE, value)
+                }
+                
+                // Try to update first
+                val rowsAffected = db.update(
+                    SettingsContract.SettingsEntry.TABLE_NAME,
+                    values,
+                    "${SettingsContract.SettingsEntry.COLUMN_KEY} = ?",
+                    arrayOf(key)
+                )
+                
+                // If no rows were updated, insert a new row
+                return if (rowsAffected > 0) {
+                    rowsAffected.toLong()
+                } else {
+                    db.insert(SettingsContract.SettingsEntry.TABLE_NAME, null, values)
+                }
+            } finally {
+                db.close()
+            }
         }
     }
     
@@ -464,5 +480,19 @@ class MessageDbHelper(context: Context, dbName: String? = DATABASE_NAME) :
      */
     fun saveSetting(key: String, value: String): Long {
         return setSetting(key, value)
+    }
+
+    /**
+     * Clear all messages from the database
+     */
+    fun clearAllMessages(): Int {
+        synchronized(dbLock) {
+            val db = writableDatabase
+            try {
+                return db.delete(MessageContract.MessageEntry.TABLE_NAME, null, null)
+            } finally {
+                db.close()
+            }
+        }
     }
 } 

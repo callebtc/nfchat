@@ -73,13 +73,11 @@ class CardEmulationService : HostApduService() {
     // NDEF processor for handling NDEF commands
     val ndefProcessor = NdefProcessor()
 
+    // Database helper instance
+    private lateinit var dbHelper: MessageDbHelper
+
     // Message to be shared when requested
-    var messageToShare: String = ""
-        set(value) {
-            field = value
-            // Forward the message to the NdefProcessor
-            ndefProcessor.setMessageToSend(value)
-        }
+    internal var messageToShare: String = ""
 
     // Callback to notify MainActivity when data is received
     var onDataReceivedListener: ((MessageData) -> Unit)? = null
@@ -160,12 +158,10 @@ class CardEmulationService : HostApduService() {
         super.onCreate()
         instance = this
         isServiceRunning = true
-
+        dbHelper = MessageDbHelper(this)
+        setupNdefProcessorCallbacks()
         Log.d(TAG, "CardEmulationService created, restart count: $serviceRestartCount")
         serviceRestartCount++
-
-        // Set up the NDEF processor callback
-        setupNdefProcessorCallbacks()
 
         // Register broadcast receiver
         val filter = IntentFilter(ACTION_REGISTER_LISTENERS)
@@ -226,6 +222,7 @@ class CardEmulationService : HostApduService() {
         scheduleServiceRestart()
 
         super.onDestroy()
+        dbHelper.close()
     }
 
     /** Schedule a delayed restart of the service */
@@ -358,7 +355,6 @@ class CardEmulationService : HostApduService() {
         Log.d(TAG, "> Received APDU: ${NfcProtocol.byteArrayToHex(commandApdu)}")
 
         // Check if background NFC is enabled
-        val dbHelper = MessageDbHelper(this)
         val backgroundNfcEnabled =
                 dbHelper.getBooleanSetting(
                         SettingsContract.SettingsEntry.KEY_ENABLE_BACKGROUND_NFC,
@@ -517,7 +513,6 @@ class CardEmulationService : HostApduService() {
     /** Process received message data and handle bringing app to foreground if needed */
     private fun processReceivedMessageData(messageData: MessageData) {
         // Check if we should bring the app to the foreground
-        val dbHelper = MessageDbHelper(this)
         val bringToForeground =
                 dbHelper.getBooleanSetting(
                         SettingsContract.SettingsEntry.KEY_BRING_TO_FOREGROUND,
@@ -696,7 +691,6 @@ class CardEmulationService : HostApduService() {
 
         if (messageData != null) {
             // Check if we should bring the app to the foreground
-            val dbHelper = MessageDbHelper(this)
             val bringToForeground =
                     dbHelper.getBooleanSetting(
                             SettingsContract.SettingsEntry.KEY_BRING_TO_FOREGROUND,
