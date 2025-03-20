@@ -305,7 +305,6 @@ class TransferManager(private val context: Activity) {
         // First, disable reader mode if we were in send mode
         if (appState == AppState.SENDING) {
             disableReaderMode()
-
             // Reset NdefProcessor write mode
             ndefProcessor.setWriteMode(false)
         }
@@ -337,10 +336,12 @@ class TransferManager(private val context: Activity) {
             setupNdefDataReceiver()
         }
 
+        chunkwiseTransferManager.cancelTransferTimeout()
+        
         Log.d(TAG, "Switched to receive mode")
     }
 
-    /** Set up data receiver for the CardEmulationService */
+    /** Setup data receiver for NDEF card emulation */
     fun setupDataReceiver() {
         // If the service instance is null, the service might have been destroyed and not yet
         // restarted
@@ -379,7 +380,7 @@ class TransferManager(private val context: Activity) {
             chunkwiseTransferManager.cancelTransferTimeout()
 
             // Start a new timeout
-            startTransferTimeout()
+            chunkwiseTransferManager.startTransferTimeout()
 
             mainHandler.post {
                 if (receivedChunks == 0) {
@@ -394,10 +395,6 @@ class TransferManager(private val context: Activity) {
                 } else if (receivedChunks == totalChunks) {
                     // This is the final notification (CHUNK_COMPLETE)
                     Log.d(TAG, "Chunk receive completed: $receivedChunks/$totalChunks")
-                    // // Update status text
-                    // onStatusChanged?.invoke(
-                    //         context.getString(R.string.receiving_chunk, receivedChunks, totalChunks)
-                    // )
                     // Notify about progress
                     chunkwiseTransferManager.onChunkReceiveProgress?.invoke(
                             receivedChunks,
@@ -406,7 +403,7 @@ class TransferManager(private val context: Activity) {
                     // Notify that chunk transfer is completed to hide the progress bar
                     onChunkTransferCompleted?.invoke()
                 } else {
-                    // This is a progress notification (CHUNK_DATA)
+                    // This is a progress notification (CHUNK_PROGRESS)
                     Log.d(TAG, "Chunk receive progress: $receivedChunks/$totalChunks")
                     // Update status text
                     onStatusChanged?.invoke(
@@ -421,33 +418,18 @@ class TransferManager(private val context: Activity) {
             }
         }
 
-        // Set up chunk error listener
-        CardEmulationService.instance?.onChunkErrorListener = { errorMessage ->
-            // Cancel any existing timeout
-            chunkwiseTransferManager.cancelTransferTimeout()
+        // Tell the service that we are the active UI component for card emulation
+        registerAsActiveUiComponent()
 
-            mainHandler.post {
-                Log.e(TAG, "Chunk error: $errorMessage")
-                onStatusChanged?.invoke(context.getString(R.string.chunked_transfer_failed))
-                Toast.makeText(
-                                context,
-                                context.getString(
-                                        R.string.chunked_transfer_error_receiver,
-                                        errorMessage
-                                ),
-                                Toast.LENGTH_LONG
-                        )
-                        .show()
-
-                // Make sure we're in receive mode to recover from the error
-                if (appState != AppState.RECEIVING) {
-                    switchToReceiveMode()
-                }
-
-                // Hide the progress bar on error
-                onChunkTransferCompleted?.invoke()
+        // Only setup the message to be shared if we're in send mode or if it was already set before
+        if (CardEmulationService.instance?.messageToShare != null) {
+            // If in sending mode and we have a message, set it
+            if (appState == AppState.SENDING && lastSentMessage.isNotEmpty()) {
+                setMessageToSend(lastSentMessage)
             }
         }
+
+        Log.d(TAG, "NDEF data receiver setup complete")
     }
 
     /** Setup NDEF data receiver for bridging with the CardEmulationService */
@@ -494,63 +476,6 @@ class TransferManager(private val context: Activity) {
         }
 
         Log.d(TAG, "NDEF data receiver setup complete")
-    }
-
-    /** Start a timeout for chunked transfers */
-    private fun startTransferTimeout() {
-        // Cancel any existing timeout first
-        chunkwiseTransferManager.cancelTransferTimeout()
-
-        // Create a new timeout handler if needed
-        if (chunkwiseTransferManager.transferTimeoutHandler == null) {
-            chunkwiseTransferManager.transferTimeoutHandler = Handler(Looper.getMainLooper())
-        }
-
-        // Create a new timeout runnable
-        chunkwiseTransferManager.transferTimeoutRunnable = Runnable {
-            Log.e(TAG, "Transfer timeout occurred")
-
-            if (chunkwiseTransferManager.chunkedTransferState != ChunkedTransferState.IDLE) {
-                // Handle timeout on sender side
-                context.runOnUiThread {
-                    onStatusChanged?.invoke(
-                            context.getString(R.string.chunked_transfer_timeout_waiting)
-                    )
-                    Toast.makeText(
-                                    context,
-                                    context.getString(R.string.chunked_transfer_timeout),
-                                    Toast.LENGTH_LONG
-                            )
-                            .show()
-
-                    // Don't reset chunked send mode or switch to receive mode
-                    // Instead, start the retry timeout if not already in retry mode
-                    if (!chunkwiseTransferManager.isRetryingTransfer) {
-                        chunkwiseTransferManager.startTransferRetryTimeout()
-                    }
-                }
-            } else if (CardEmulationService.instance?.isReceivingChunkedMessage() == true) {
-                // Handle timeout on receiver side
-                CardEmulationService.instance?.resetChunkedMessageState()
-                context.runOnUiThread {
-                    onStatusChanged?.invoke(context.getString(R.string.chunked_transfer_failed))
-                    Toast.makeText(
-                                    context,
-                                    context.getString(R.string.chunked_transfer_timeout),
-                                    Toast.LENGTH_LONG
-                            )
-                            .show()
-                    // Hide the progress bar on timeout
-                    onChunkTransferCompleted?.invoke()
-                }
-            }
-        }
-
-        // Schedule the timeout
-        chunkwiseTransferManager.transferTimeoutHandler?.postDelayed(
-                chunkwiseTransferManager.transferTimeoutRunnable!!,
-                chunkwiseTransferManager.transferRetryTimeoutMs
-        )
     }
 
     /** Cancel any active transfer timeout */
@@ -899,6 +824,22 @@ class TransferManager(private val context: Activity) {
         } catch (e: Exception) {
             Log.e(TAG, "Error restarting service: ${e.message}")
         }
+    }
+
+    /** Register as the active UI component for card emulation */
+    private fun registerAsActiveUiComponent() {
+        // Just log that this is the active UI component
+        Log.d(TAG, "Registering MainActivity as active UI component for card emulation")
+        // No direct property access is needed - the service will communicate with this instance
+        // through the callbacks we've already set up
+    }
+
+    /** Set the message to send */
+    private fun setMessageToSend(message: String) {
+        // Set the message in the service
+        CardEmulationService.instance?.messageToShare = message
+        // Also set the message in the NdefProcessor
+        ndefProcessor.setMessageToSend(message)
     }
 
     companion object {

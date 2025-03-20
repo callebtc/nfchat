@@ -248,7 +248,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         else if (isNfcIntent) {
             Log.d(TAG, "App launched via NFC intent: ${intent?.action}")
             // Start in receive mode since we were launched by an NFC discovery
-            startInReceiveMode(appState, etMessage)
+            startInReceiveMode()
             // Process the NFC intent
             intent?.let { intentManager.handleNfcIntent(it, appState) }
         }
@@ -259,13 +259,13 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
                     "fromBackgroundReceive: App brought to foreground from background message receive"
             )
             // Make sure we're in receive mode
-            startInReceiveMode(appState, etMessage)
+            startInReceiveMode()
             // Show a toast to inform the user
             Toast.makeText(this, getString(R.string.app_launched_by_nfc), Toast.LENGTH_SHORT).show()
         }
         // Start in receive mode by default, but only if we're not handling a share or NFC intent
         else if (!isShareIntent) {
-            startInReceiveMode(appState, etMessage)
+            startInReceiveMode()
         }
 
         // Restore state if available
@@ -286,7 +286,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
     /**
      * Start the app in receive mode
      */
-    fun startInReceiveMode(appState: AppState, etMessage: EditText) {
+    fun startInReceiveMode() {
         // Reset the share intent flag since we're starting normally
         intentManager.setOpenedViaShareIntent(false)
         
@@ -501,9 +501,6 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
 
         // Save the new intent to replace the old one
         setIntent(intent)
-
-        // TODO: Handle this later in the intent manager
-        // handleNfcIntent(intent)
 
         // Delegate to the intent manager
         intentManager.handleNewIntent(intent, appState, etMessage)

@@ -28,6 +28,9 @@ class CashuHandler : MessageHandler {
      * @return true if Cashu tokens were found and processed, false otherwise
      */
     override fun processMessage(context: Context, message: String, dbHelper: MessageDbHelper): Boolean {
+        if (!isEnabled(dbHelper)) {
+            return false
+        }
         // Find Cashu tokens in the message
         val matcher = CASHU_TOKEN_PATTERN.matcher(message)
         var found = false
