@@ -11,6 +11,8 @@ import android.util.Log
 import android.widget.EditText
 import android.widget.Toast
 import com.example.nfcdemo.nfc.TransferManager
+import android.nfc.NdefMessage
+import java.nio.charset.Charset
 
 /**
  * Manager class for handling various intents in the application
@@ -104,6 +106,7 @@ class IntentManager(
             intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) {
             
             handleNfcIntent(intent, appState)
+            handleNfcNdefCardIntent(intent)
         }
     }
     
@@ -150,6 +153,56 @@ class IntentManager(
             }
         } ?: run {
             Log.e(TAG, "No tag found in intent")
+        }
+    }
+
+    private fun handleNfcNdefCardIntent(intent: Intent) {
+        Log.d(TAG, "MainActivity handleNfcIntent ${intent.action}")
+        if (NfcAdapter.ACTION_NDEF_DISCOVERED == intent.action) {
+            val rawMessages = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
+            if (rawMessages != null) {
+                val messages = rawMessages.map { it as NdefMessage }
+                // Process NDEF messages
+                for (message in messages) {
+                    for (record in message.records) {
+                        if (record.toMimeType()?.contentEquals("text/plain") == true) {
+                            val payload = record.payload
+                            // Get the text encoding
+                            val textEncoding =
+                                    if ((payload[0].toInt() and 128) == 0
+                                    ) { // Bit 7 signals encoding. 0 for UTF-8, 1 for UTF-16.
+                                        Charset.forName("UTF-8")
+                                    } else {
+                                        Charset.forName("UTF-16")
+                                    }
+                            // Get the language code
+                            val languageCodeLength =
+                                    payload[0].toInt() and
+                                            0x3f // Bits 5..0 reserve for language code length.
+                            // Get the actual text data by decoding the payload
+                            val textData =
+                                    String(
+                                            payload,
+                                            languageCodeLength + 1,
+                                            payload.size - languageCodeLength - 1,
+                                            textEncoding
+                                    )
+                            Log.d(TAG, "Received NDEF message: $textData")
+                            // Save and display the received data in your chat
+                            messageSaveCallback?.saveAndAddMessage(textData, false)
+                        }
+                    }
+                }
+            } else {
+                // Tag might not contain NDEF data
+                val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
+                if (tag != null) {
+                    Log.d(TAG, "Received NFC tag without NDEF data")
+                    Toast.makeText(context, context.getString(R.string.nfc_tag_detected), Toast.LENGTH_SHORT).show()
+                }
+            }
+        } else  {
+            Log.d(TAG, "Not handling ANOTHER NFC intent: ${intent.action}")
         }
     }
     
@@ -225,28 +278,6 @@ class IntentManager(
         } else {
             Log.d(TAG, "Not a share intent or wrong type: ${intent?.action}, type: ${intent?.type}")
         }
-    }
-    
-    /**
-     * Start the app in receive mode
-     */
-    fun startInReceiveMode(appState: AppState, etMessage: EditText) {
-        // Reset the share intent flag since we're starting normally
-        setOpenedViaShareIntent(false)
-        
-        // Use the new switchToReceiveMode method for consistency
-        mainHandler.postDelayed({
-            // Only switch to receive mode if we're not already in send mode
-            if (appState != AppState.SENDING) {
-                transferManager.switchToReceiveMode()
-                
-                // Set up the data receiver
-                transferManager.setupDataReceiver()
-                
-                // Set the current message for the CardEmulationService
-                transferManager.setCardEmulationMessage(etMessage.text.toString())
-            }
-        }, 500)
     }
     
     /**

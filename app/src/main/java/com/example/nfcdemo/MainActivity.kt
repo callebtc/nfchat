@@ -7,7 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.nfc.NdefMessage
+// import android.nfc.NdefMessage
 import android.nfc.NfcAdapter
 import android.nfc.NfcAdapter.ReaderCallback
 import android.nfc.Tag
@@ -39,7 +39,6 @@ import com.example.nfcdemo.handlers.MessageHandlerManager
 import com.example.nfcdemo.nfc.MessageProcessor
 import com.example.nfcdemo.nfc.TransferManager
 import com.example.nfcdemo.ui.AnimationUtils
-import java.nio.charset.Charset
 
 /** Enum representing the different states of the app */
 enum class AppState {
@@ -249,7 +248,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         else if (isNfcIntent) {
             Log.d(TAG, "App launched via NFC intent: ${intent?.action}")
             // Start in receive mode since we were launched by an NFC discovery
-            intentManager.startInReceiveMode(appState, etMessage)
+            startInReceiveMode(appState, etMessage)
             // Process the NFC intent
             intent?.let { intentManager.handleNfcIntent(it, appState) }
         }
@@ -260,13 +259,13 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
                     "fromBackgroundReceive: App brought to foreground from background message receive"
             )
             // Make sure we're in receive mode
-            intentManager.startInReceiveMode(appState, etMessage)
+            startInReceiveMode(appState, etMessage)
             // Show a toast to inform the user
             Toast.makeText(this, getString(R.string.app_launched_by_nfc), Toast.LENGTH_SHORT).show()
         }
         // Start in receive mode by default, but only if we're not handling a share or NFC intent
         else if (!isShareIntent) {
-            intentManager.startInReceiveMode(appState, etMessage)
+            startInReceiveMode(appState, etMessage)
         }
 
         // Restore state if available
@@ -282,6 +281,28 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
                 )
         intentManager.setBackgroundNfcEnabled(backgroundNfcEnabled)
         Log.d(TAG, "Initial background NFC setting: enabled=$backgroundNfcEnabled")
+    }
+
+    /**
+     * Start the app in receive mode
+     */
+    fun startInReceiveMode(appState: AppState, etMessage: EditText) {
+        // Reset the share intent flag since we're starting normally
+        intentManager.setOpenedViaShareIntent(false)
+        
+        // Use the new switchToReceiveMode method for consistency
+        mainHandler.postDelayed({
+            // Only switch to receive mode if we're not already in send mode
+            if (appState != AppState.SENDING) {
+                transferManager.switchToReceiveMode()
+                
+                // Set up the data receiver
+                transferManager.setupDataReceiver()
+                
+                // Set the current message for the CardEmulationService
+                transferManager.setCardEmulationMessage(etMessage.text.toString())
+            }
+        }, 500)
     }
 
     private fun setupClickListeners() {
@@ -482,65 +503,10 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         setIntent(intent)
 
         // TODO: Handle this later in the intent manager
-        handleNfcIntent(intent)
+        // handleNfcIntent(intent)
 
         // Delegate to the intent manager
         intentManager.handleNewIntent(intent, appState, etMessage)
-    }
-
-    private fun handleNfcIntent(intent: Intent) {
-        Log.d(TAG, "MainActivity handleNfcIntent ${intent.action}")
-        if (NfcAdapter.ACTION_NDEF_DISCOVERED == intent.action) {
-            val rawMessages = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
-            if (rawMessages != null) {
-                val messages = rawMessages.map { it as NdefMessage }
-                // Process NDEF messages
-                for (message in messages) {
-                    for (record in message.records) {
-                        if (record.toMimeType()?.contentEquals("text/plain") == true) {
-                            val payload = record.payload
-                            // Get the text encoding
-                            val textEncoding =
-                                    if ((payload[0].toInt() and 128) == 0
-                                    ) { // Bit 7 signals encoding. 0 for UTF-8, 1 for UTF-16.
-                                        Charset.forName("UTF-8")
-                                    } else {
-                                        Charset.forName("UTF-16")
-                                    }
-                            // Get the language code
-                            val languageCodeLength =
-                                    payload[0].toInt() and
-                                            0x3f // Bits 5..0 reserve for language code length.
-                            // Get the actual text data by decoding the payload
-                            val textData =
-                                    String(
-                                            payload,
-                                            languageCodeLength + 1,
-                                            payload.size - languageCodeLength - 1,
-                                            textEncoding
-                                    )
-                            Log.d(TAG, "Received NDEF message: $textData")
-                            // Save and display the received data in your chat
-                            saveAndAddMessage(textData, false)
-                        }
-                    }
-                }
-            } else {
-                // Tag might not contain NDEF data
-                val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
-                if (tag != null) {
-                    Log.d(TAG, "Received NFC tag without NDEF data")
-                    Toast.makeText(this, getString(R.string.nfc_tag_detected), Toast.LENGTH_SHORT)
-                            .show()
-                }
-            }
-        } else if (NfcAdapter.ACTION_TAG_DISCOVERED == intent.action ||
-                        NfcAdapter.ACTION_TECH_DISCOVERED == intent.action
-        ) {
-            Log.d(TAG, "Handling NFC intent: ${intent.action}")
-            // Handle other NFC intents if needed, e.g., for your HCE communication
-            intent?.let { super.onNewIntent(it) }
-        }
     }
 
     /** Vibrate on message sent/received */
