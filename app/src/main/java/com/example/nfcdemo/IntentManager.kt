@@ -12,7 +12,9 @@ import android.widget.EditText
 import android.widget.Toast
 import com.example.nfcdemo.nfc.TransferManager
 import android.nfc.NdefMessage
+import com.example.nfcdemo.nfc.NdefProcessor
 import java.nio.charset.Charset
+import com.example.nfcdemo.ui.VibrationUtils
 
 /**
  * Manager class for handling various intents in the application
@@ -38,6 +40,9 @@ class IntentManager(
     private var openedViaShareIntent = false
     private var backgroundNfcEnabled = true
     
+    // NdefProcessor for handling NDEF operations
+    private val ndefProcessor = NdefProcessor()
+    
     /**
      * Set the background NFC enabled state
      */
@@ -58,6 +63,16 @@ class IntentManager(
     fun setOpenedViaShareIntent(opened: Boolean) {
         openedViaShareIntent = opened
         onOpenedViaShareIntentChanged?.invoke(opened)
+    }
+    
+    /**
+     * Set up callbacks for the NdefProcessor
+     */
+    fun setupNdefProcessorCallbacks() {
+        // Set the callback for when text is received from an NDEF message
+        ndefProcessor.onNdefTextReceived = { textData ->
+            messageSaveCallback?.saveAndAddMessage(textData, false)
+        }
     }
     
     /**
@@ -106,7 +121,11 @@ class IntentManager(
             intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) {
             
             handleNfcIntent(intent, appState)
-            handleNfcNdefCardIntent(intent)
+            
+            // Use the NdefProcessor for NDEF messages
+            if (intent.action == NfcAdapter.ACTION_NDEF_DISCOVERED) {
+                ndefProcessor.handleNfcNdefCardIntent(context, intent)
+            }
         }
     }
     
@@ -144,7 +163,7 @@ class IntentManager(
                 transferManager.handleTagDiscovered(it)
                 
                 // Vibrate to indicate NFC detection
-                transferManager.onVibrate?.invoke(100)
+                VibrationUtils.vibrate(context, 100)
                 
                 // Show a toast to indicate the app was launched by NFC
                 // if (intent.action != NfcAdapter.ACTION_TECH_DISCOVERED) {
@@ -153,56 +172,6 @@ class IntentManager(
             }
         } ?: run {
             Log.e(TAG, "No tag found in intent")
-        }
-    }
-
-    private fun handleNfcNdefCardIntent(intent: Intent) {
-        Log.d(TAG, "MainActivity handleNfcIntent ${intent.action}")
-        if (NfcAdapter.ACTION_NDEF_DISCOVERED == intent.action) {
-            val rawMessages = intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
-            if (rawMessages != null) {
-                val messages = rawMessages.map { it as NdefMessage }
-                // Process NDEF messages
-                for (message in messages) {
-                    for (record in message.records) {
-                        if (record.toMimeType()?.contentEquals("text/plain") == true) {
-                            val payload = record.payload
-                            // Get the text encoding
-                            val textEncoding =
-                                    if ((payload[0].toInt() and 128) == 0
-                                    ) { // Bit 7 signals encoding. 0 for UTF-8, 1 for UTF-16.
-                                        Charset.forName("UTF-8")
-                                    } else {
-                                        Charset.forName("UTF-16")
-                                    }
-                            // Get the language code
-                            val languageCodeLength =
-                                    payload[0].toInt() and
-                                            0x3f // Bits 5..0 reserve for language code length.
-                            // Get the actual text data by decoding the payload
-                            val textData =
-                                    String(
-                                            payload,
-                                            languageCodeLength + 1,
-                                            payload.size - languageCodeLength - 1,
-                                            textEncoding
-                                    )
-                            Log.d(TAG, "Received NDEF message: $textData")
-                            // Save and display the received data in your chat
-                            messageSaveCallback?.saveAndAddMessage(textData, false)
-                        }
-                    }
-                }
-            } else {
-                // Tag might not contain NDEF data
-                val tag = intent.getParcelableExtra<Tag>(NfcAdapter.EXTRA_TAG)
-                if (tag != null) {
-                    Log.d(TAG, "Received NFC tag without NDEF data")
-                    Toast.makeText(context, context.getString(R.string.nfc_tag_detected), Toast.LENGTH_SHORT).show()
-                }
-            }
-        } else  {
-            Log.d(TAG, "Not handling ANOTHER NFC intent: ${intent.action}")
         }
     }
     
@@ -281,35 +250,32 @@ class IntentManager(
     }
     
     /**
-     * Handle post-send actions, such as closing the app after sending a shared message
-     * @return true if the app should be closed, false otherwise
+     * Handle post-send actions (e.g., closing the app if it was opened via a share intent)
      */
     fun handlePostSendActions(): Boolean {
-        // Check if we should close the app after sending a shared message
-        if (openedViaShareIntent) {
-            val closeAfterSharedSend = dbHelper.getBooleanSetting(
-                com.example.nfcdemo.data.SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND, 
-                com.example.nfcdemo.data.AppConstants.DefaultSettings.CLOSE_AFTER_SHARED_SEND
-            )
-            
-            if (closeAfterSharedSend) {
-                // Show a toast to inform the user
-                Toast.makeText(context, context.getString(R.string.message_sent_closing), Toast.LENGTH_SHORT).show()
-                
-                // Close the app after a short delay
-                mainHandler.postDelayed({
-                    context.finish()
-                }, 1000)
-                return true
-            }
+        // If we were opened via a share intent, and the setting is enabled, finish the activity
+        val finishAfterSend = dbHelper.getBooleanSetting(
+            com.example.nfcdemo.data.SettingsContract.SettingsEntry.KEY_CLOSE_AFTER_SHARED_SEND,
+            com.example.nfcdemo.data.AppConstants.DefaultSettings.CLOSE_AFTER_SHARED_SEND
+        )
+        
+        if (openedViaShareIntent && finishAfterSend) {
+            Log.d(TAG, "Finishing activity after sending shared content")
+            mainHandler.postDelayed({
+                context.finish()
+            }, 1000)
+            return true
         }
+        
         return false
     }
     
     /**
-     * Helper method to determine if the app is in the foreground
+     * Check if the app is in the foreground
      */
     private fun isAppInForeground(intent: Intent): Boolean {
-        return context.hasWindowFocus() || (intent.getBooleanExtra("from_background_receive", false))
+        // If this is a new intent to an existing activity, we're in the foreground
+        return intent.flags and Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT != 0 ||
+                intent.flags and Intent.FLAG_ACTIVITY_NEW_TASK == 0
     }
 } 

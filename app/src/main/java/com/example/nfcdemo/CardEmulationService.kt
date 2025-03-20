@@ -68,6 +68,21 @@ class CardEmulationService : HostApduService() {
                 2 // Minimum number of restarts before scheduling
         private const val SERVICE_HEARTBEAT_INTERVAL = 60000L // 1 minute
         private const val DELAYED_MESSAGE_DELIVERY_MS = 1000L // 1 second
+
+        /**
+         * Check if the CardEmulationService is running.
+         * @param context The context to use for checking.
+         * @return True if the service is running, false otherwise.
+         */
+        fun isServiceRunning(context: Context): Boolean {
+            val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            for (service in manager.getRunningServices(Int.MAX_VALUE)) {
+                if (CardEmulationService::class.java.name == service.service.className) {
+                    return true
+                }
+            }
+            return false
+        }
     }
 
     // NDEF processor for handling NDEF commands

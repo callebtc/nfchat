@@ -1,7 +1,6 @@
 package com.example.nfcdemo
 
 import android.app.Activity
-import android.app.ActivityManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -16,9 +15,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
+// import android.os.VibrationEffect - removing since vibrate is now handled by TransferManager
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
@@ -39,6 +36,7 @@ import com.example.nfcdemo.handlers.MessageHandlerManager
 import com.example.nfcdemo.nfc.MessageProcessor
 import com.example.nfcdemo.nfc.TransferManager
 import com.example.nfcdemo.ui.AnimationUtils
+import com.example.nfcdemo.ui.VibrationUtils
 
 /** Enum representing the different states of the app */
 enum class AppState {
@@ -68,11 +66,6 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
 
     // Default message length limit before truncation
     private var messageLengthLimit = AppConstants.DefaultSettings.MESSAGE_LENGTH_LIMIT
-
-    // For foreground dispatch
-    private lateinit var pendingIntent: PendingIntent
-    private lateinit var intentFilters: Array<IntentFilter>
-    private lateinit var techLists: Array<Array<String>>
 
     // Managers
     private lateinit var transferManager: TransferManager
@@ -151,8 +144,8 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         // Initialize database helper
         dbHelper = MessageDbHelper(this)
 
-        // Initialize message handlers
-        initializeMessageHandlers()
+        // Initialize message handlers - now using MessageProcessor
+        MessageProcessor.initializeHandlers()
 
         etMessage = findViewById(R.id.etMessage)
         tvStatus = findViewById(R.id.tvStatus)
@@ -190,8 +183,8 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
             return
         }
 
-        // Set up NFC foreground dispatch system
-        setupForegroundDispatch()
+        // Set up NFC foreground dispatch system - now using TransferManager
+        transferManager.setupForegroundDispatch()
 
         // Disable send button initially
         btnSendMode.isEnabled = false
@@ -376,8 +369,6 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
             MessageProcessor.processReceivedMessage(this, messageData, dbHelper)
         }
 
-        transferManager.onVibrate = { duration -> vibrate(duration) }
-
         // Add callbacks for chunk transfer progress
         transferManager.onChunkTransferStarted = { totalChunks ->
             mainHandler.post {
@@ -417,6 +408,9 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         intentManager.onOpenedViaShareIntentChanged = { opened ->
             // Update any UI elements that depend on the openedViaShareIntent state
         }
+        
+        // Set up NDEF processor callbacks in the intent manager
+        intentManager.setupNdefProcessorCallbacks()
     }
 
     /**
@@ -436,65 +430,6 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         return messageLengthLimit
     }
 
-    private fun setupForegroundDispatch() {
-        Log.d(TAG, "MainActivity setupForegroundDispatch")
-        // Create a PendingIntent that will be used to deliver NFC intents to our activity
-        val intent = Intent(this, javaClass).apply { addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP) }
-
-        val flags =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-                } else {
-                    PendingIntent.FLAG_UPDATE_CURRENT
-                }
-
-        pendingIntent = PendingIntent.getActivity(this, 0, intent, flags)
-
-        // Set up intent filters for NFC discovery
-        val ndef =
-                IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED).apply {
-                    try {
-                        addDataType("*/*")
-                    } catch (e: IntentFilter.MalformedMimeTypeException) {
-                        Log.e(TAG, "MalformedMimeTypeException", e)
-                    }
-                }
-
-        val tech = IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED)
-        val tag = IntentFilter(NfcAdapter.ACTION_TAG_DISCOVERED)
-
-        intentFilters = arrayOf(ndef, tech, tag)
-
-        // Set up tech lists
-        techLists = arrayOf(arrayOf(IsoDep::class.java.name))
-    }
-
-    private fun enableForegroundDispatch() {
-        Log.d(TAG, "MainActivity enableForegroundDispatch")
-        val nfcAdapter = transferManager.getNfcAdapter()
-        if (nfcAdapter != null) {
-            try {
-                nfcAdapter.enableForegroundDispatch(this, pendingIntent, intentFilters, techLists)
-                Log.d(TAG, "Foreground dispatch enabled")
-            } catch (e: IllegalStateException) {
-                Log.e(TAG, "Error enabling foreground dispatch", e)
-            }
-        }
-    }
-
-    private fun disableForegroundDispatch() {
-        Log.d(TAG, "MainActivity disableForegroundDispatch")
-        val nfcAdapter = transferManager.getNfcAdapter()
-        if (nfcAdapter != null) {
-            try {
-                nfcAdapter.disableForegroundDispatch(this)
-                Log.d(TAG, "Foreground dispatch disabled")
-            } catch (e: IllegalStateException) {
-                Log.e(TAG, "Error disabling foreground dispatch", e)
-            }
-        }
-    }
-
     override fun onNewIntent(intent: Intent) {
         Log.d(TAG, "MainActivity onNewIntent")
         super.onNewIntent(intent)
@@ -504,35 +439,6 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
 
         // Delegate to the intent manager
         intentManager.handleNewIntent(intent, appState, etMessage)
-    }
-
-    /** Vibrate on message sent/received */
-    private fun vibrate(duration: Long) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager =
-                        getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-                val vibrator = vibratorManager.defaultVibrator
-                vibrator.vibrate(
-                        VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(
-                            VibrationEffect.createOneShot(
-                                    duration,
-                                    VibrationEffect.DEFAULT_AMPLITUDE
-                            )
-                    )
-                } else {
-                    @Suppress("DEPRECATION") vibrator.vibrate(duration)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error vibrating: ${e.message}")
-        }
     }
 
     /**
@@ -655,27 +561,12 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         }
     }
 
-    /**
-     * Check if the CardEmulationService is running.
-     * @param serviceClass The class of the service to check.
-     * @return True if the service is running, false otherwise.
-     */
-    private fun isServiceRunning(serviceClass: Class<*>): Boolean {
-        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        for (service in manager.getRunningServices(Int.MAX_VALUE)) {
-            if (serviceClass.name == service.service.className) {
-                return true
-            }
-        }
-        return false
-    }
-
     override fun onResume() {
         Log.d(TAG, "MainActivity onResume")
         super.onResume()
 
         // Check if the CardEmulationService is running and start it if not
-        if (!isServiceRunning(CardEmulationService::class.java)) {
+        if (!CardEmulationService.isServiceRunning(this)) {
             Log.d(TAG, "CardEmulationService is not running, starting it")
             val serviceIntent = Intent(this, CardEmulationService::class.java)
             startService(serviceIntent)
@@ -694,7 +585,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         registerReceiver(serviceLifecycleReceiver, serviceFilter, Context.RECEIVER_NOT_EXPORTED)
 
         // Enable foreground dispatch to intercept all NFC intents
-        enableForegroundDispatch()
+        transferManager.enableForegroundDispatch()
 
         if (appState == AppState.SENDING || transferManager.isRetryingTransfer()) {
             transferManager.enableReaderModeForWriting()
@@ -735,7 +626,7 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
             transferManager.disableReaderMode()
         }
 
-        disableForegroundDispatch()
+        transferManager.disableForegroundDispatch()
     }
 
     override fun onDestroy() {
@@ -753,18 +644,5 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         Log.d(TAG, "MainActivity onTagDiscovered")
         // Delegate to the transfer manager
         transferManager.handleTagDiscovered(tag)
-    }
-
-    /** Initialize the message handlers */
-    private fun initializeMessageHandlers() {
-        Log.d(TAG, "MainActivity initializeMessageHandlers")
-        // Clear any existing handlers
-        MessageHandlerManager.clearHandlers()
-
-        // Register the handlers
-        MessageHandlerManager.registerHandler(LinkHandler())
-        MessageHandlerManager.registerHandler(CashuHandler())
-
-        Log.d(TAG, "Message handlers initialized")
     }
 }

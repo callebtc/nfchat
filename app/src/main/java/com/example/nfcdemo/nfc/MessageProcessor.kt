@@ -24,15 +24,16 @@ object MessageProcessor {
     /**
      * Initialize the message handlers
      */
-    private fun initializeHandlers() {
-        if (!handlersInitialized) {
-            // Register the handlers
-            MessageHandlerManager.registerHandler(LinkHandler())
-            MessageHandlerManager.registerHandler(CashuHandler())
-            
-            handlersInitialized = true
-            Log.d(TAG, "Message handlers initialized")
-        }
+    fun initializeHandlers() {
+        // Clear any existing handlers
+        MessageHandlerManager.clearHandlers()
+        
+        // Register the handlers
+        MessageHandlerManager.registerHandler(LinkHandler())
+        MessageHandlerManager.registerHandler(CashuHandler())
+        
+        handlersInitialized = true
+        Log.d(TAG, "Message handlers initialized")
     }
     
     /**

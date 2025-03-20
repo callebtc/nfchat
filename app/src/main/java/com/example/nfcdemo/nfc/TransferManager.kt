@@ -1,14 +1,17 @@
 package com.example.nfcdemo.nfc
 
 import android.app.Activity
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.IntentFilter.MalformedMimeTypeException
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.TagLostException
 import android.nfc.tech.IsoDep
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -16,6 +19,7 @@ import android.widget.Toast
 import com.example.nfcdemo.AppState
 import com.example.nfcdemo.CardEmulationService
 import com.example.nfcdemo.R
+import com.example.nfcdemo.ui.VibrationUtils
 import java.io.IOException
 import java.nio.charset.Charset
 
@@ -40,12 +44,16 @@ class TransferManager(private val context: Activity) {
     // Handler for main thread operations
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    // For foreground dispatch
+    private lateinit var pendingIntent: PendingIntent
+    private lateinit var intentFilters: Array<IntentFilter>
+    private lateinit var techLists: Array<Array<String>>
+
     // Callbacks
     var onAppStateChanged: ((AppState) -> Unit)? = null
     var onStatusChanged: ((String) -> Unit)? = null
     var onMessageSent: ((Int) -> Unit)? = null
     var onMessageReceived: ((MessageData, Boolean) -> Unit)? = null
-    var onVibrate: ((Long) -> Unit)? = null
 
     // Chunk transfer callbacks
     var onChunkTransferStarted: ((Int) -> Unit)? = null
@@ -146,7 +154,7 @@ class TransferManager(private val context: Activity) {
                 onMessageSent?.invoke(-1) // -1 indicates the last message
 
                 // Vibrate on message sent
-                onVibrate?.invoke(200)
+                VibrationUtils.vibrate(context, 200)
 
                 // Clear the sent message to prevent re-sending
                 lastSentMessage = ""
@@ -367,7 +375,7 @@ class TransferManager(private val context: Activity) {
                     onStatusChanged?.invoke(context.getString(R.string.status_receive_mode))
 
                     // Vibrate on message received
-                    onVibrate?.invoke(200)
+                    VibrationUtils.vibrate(context, 200)
                 }
             } else {
                 Log.d(TAG, "Duplicate message received (same ID), ignoring: ${messageData.id}")
@@ -456,7 +464,7 @@ class TransferManager(private val context: Activity) {
                         onStatusChanged?.invoke(context.getString(R.string.status_receive_mode))
 
                         // Vibrate on message received
-                        onVibrate?.invoke(200)
+                        VibrationUtils.vibrate(context, 200)
                     }
                 } else {
                     Log.d(
@@ -593,7 +601,7 @@ class TransferManager(private val context: Activity) {
                         onStatusChanged?.invoke(context.getString(R.string.status_receive_mode))
 
                         // Vibrate on message received
-                        onVibrate?.invoke(200)
+                        VibrationUtils.vibrate(context, 200)
                     }
                 } else {
                     Log.d(TAG, "Duplicate message received (same ID), ignoring: ${messageData.id}")
@@ -628,7 +636,7 @@ class TransferManager(private val context: Activity) {
                     onMessageSent?.invoke(-1) // -1 indicates the last message
 
                     // Vibrate on message sent
-                    onVibrate?.invoke(200)
+                    VibrationUtils.vibrate(context, 200)
 
                     // Clear the sent message to prevent re-sending
                     lastSentMessage = ""
@@ -840,6 +848,74 @@ class TransferManager(private val context: Activity) {
         CardEmulationService.instance?.messageToShare = message
         // Also set the message in the NdefProcessor
         ndefProcessor.setMessageToSend(message)
+    }
+
+    /**
+     * Set up NFC foreground dispatch
+     */
+    fun setupForegroundDispatch() {
+        Log.d(TAG, "TransferManager setupForegroundDispatch")
+        // Create a PendingIntent that will be used to deliver NFC intents to our activity
+        val intent = Intent(context, context.javaClass).apply { addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP) }
+
+        val flags =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                } else {
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                }
+
+        pendingIntent = PendingIntent.getActivity(context, 0, intent, flags)
+
+        // Set up intent filters for NFC discovery
+        val ndef =
+                IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED).apply {
+                    try {
+                        addDataType("*/*")
+                    } catch (e: MalformedMimeTypeException) {
+                        Log.e(TAG, "MalformedMimeTypeException", e)
+                    }
+                }
+
+        val tech = IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED)
+        val tag = IntentFilter(NfcAdapter.ACTION_TAG_DISCOVERED)
+
+        intentFilters = arrayOf(ndef, tech, tag)
+
+        // Set up tech lists
+        techLists = arrayOf(arrayOf(IsoDep::class.java.name))
+    }
+
+    /**
+     * Enable foreground dispatch
+     */
+    fun enableForegroundDispatch() {
+        Log.d(TAG, "TransferManager enableForegroundDispatch")
+        val nfcAdapterLocal = nfcAdapter
+        if (nfcAdapterLocal != null) {
+            try {
+                nfcAdapterLocal.enableForegroundDispatch(context, pendingIntent, intentFilters, techLists)
+                Log.d(TAG, "Foreground dispatch enabled")
+            } catch (e: IllegalStateException) {
+                Log.e(TAG, "Error enabling foreground dispatch", e)
+            }
+        }
+    }
+
+    /**
+     * Disable foreground dispatch
+     */
+    fun disableForegroundDispatch() {
+        Log.d(TAG, "TransferManager disableForegroundDispatch")
+        val nfcAdapterLocal = nfcAdapter
+        if (nfcAdapterLocal != null) {
+            try {
+                nfcAdapterLocal.disableForegroundDispatch(context)
+                Log.d(TAG, "Foreground dispatch disabled")
+            } catch (e: IllegalStateException) {
+                Log.e(TAG, "Error disabling foreground dispatch", e)
+            }
+        }
     }
 
     companion object {
