@@ -155,6 +155,13 @@ class NdefProcessor {
     /** Handles SELECT FILE commands */
     private fun handleSelectFile(apdu: ByteArray): ByteArray {
         val fileId = apdu.sliceArray(5 until 7)
+        
+        // If we're not in write mode, act as if the tag doesn't exist by returning error
+        if (isInWriteMode) {
+            Log.d(TAG, "NdefProcessor: Not in read mode, acting as non-existent tag")
+            return NDEF_RESPONSE_ERROR
+        }
+        
         return when {
             Arrays.equals(fileId, CC_FILE_ID) -> {
                 selectedFile = CC_FILE
@@ -164,13 +171,14 @@ class NdefProcessor {
             Arrays.equals(fileId, NDEF_FILE_ID) -> {
                 // If in write mode and has a message to send, use that message
                 selectedFile =
-                        if (isInWriteMode && messageToSend.isNotEmpty()) {
+                        if (messageToSend.isNotEmpty()) {
                             createNdefMessage(messageToSend)
                         } else {
-                            // Otherwise use default message or empty
+                            Log.d(TAG, "NdefProcessor: No message to send, using default message")
+                            // Otherwise use default message
                             createNdefMessage("hello-2")
                         }
-                Log.d(TAG, "NdefProcessor: NDEF File selected, write mode: $isInWriteMode")
+                Log.d(TAG, "NdefProcessor: NDEF File selected, using message: $messageToSend")
                 NDEF_RESPONSE_OK
             }
             else -> {
@@ -344,6 +352,12 @@ class NdefProcessor {
 
     /** Processes an APDU command and returns the appropriate response */
     fun processCommandApdu(commandApdu: ByteArray): ByteArray {
+        // When not in write mode, act as if the tag doesn't exist by returning error for all commands
+        if (isInWriteMode) {
+            Log.d(TAG, "NdefProcessor: Not in read mode, ignoring APDU: ${byteArrayToHex(commandApdu)}")
+            return NDEF_RESPONSE_ERROR
+        }
+        
         // Check if NDEF AID is selected
         if (Arrays.equals(commandApdu, NDEF_SELECT_AID)) {
             Log.d(TAG, "NdefProcessor: NDEF AID selected")

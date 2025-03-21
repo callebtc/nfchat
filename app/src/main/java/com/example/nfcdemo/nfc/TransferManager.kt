@@ -235,11 +235,16 @@ class TransferManager(private val context: Activity) {
     /** Set the last sent message */
     fun setLastSentMessage(message: String) {
         lastSentMessage = message
-        // Also set the message in the NdefProcessor when in send mode
-        if (appState == AppState.SENDING) {
-            ndefProcessor.setMessageToSend(message)
-            ndefProcessor.setWriteMode(true)
-        }
+        
+        // Set the message in our NdefProcessor
+        // ndefProcessor.setMessageToSend(message)
+        
+        // Also set the message in the CardEmulationService's NdefProcessor
+        // CardEmulationService.instance?.ndefProcessor?.setMessageToSend(message)
+        setMessageToSend(message)
+        // Also set the write mode based on current state
+        ndefProcessor.setWriteMode(appState == AppState.SENDING)
+        CardEmulationService.instance?.ndefProcessor?.setWriteMode(appState == AppState.SENDING)
     }
 
     /** Get the last sent message */
@@ -249,6 +254,7 @@ class TransferManager(private val context: Activity) {
 
     /** Toggle between send and receive modes */
     fun toggleMode() {
+        Log.d(TAG, "toggleMode: Toggling mode from ${appState} to ${AppState.RECEIVING}")
         when (appState) {
             AppState.SENDING -> {
                 // If in send mode, switch to receive mode
@@ -277,6 +283,7 @@ class TransferManager(private val context: Activity) {
 
     /** Switch to send mode */
     fun switchToSendMode() {
+        Log.d(TAG, "switchToSendMode: Switching to send mode")
         // Only proceed if there's a message to send
         if (lastSentMessage.isEmpty()) {
             Log.d(TAG, "No message to send, not switching to send mode")
@@ -300,7 +307,12 @@ class TransferManager(private val context: Activity) {
 
         // Configure NdefProcessor for write mode
         ndefProcessor.setWriteMode(true)
-        ndefProcessor.setMessageToSend(lastSentMessage)
+        setMessageToSend(lastSentMessage)
+        // ndefProcessor.setMessageToSend(lastSentMessage)
+        
+        // // Also set the CardEmulationService's NdefProcessor if available
+        // CardEmulationService.instance?.ndefProcessor?.setWriteMode(true)
+        // CardEmulationService.instance?.ndefProcessor?.setMessageToSend(lastSentMessage)
 
         // Enable reader mode for sending data
         enableReaderModeForWriting()
@@ -310,11 +322,15 @@ class TransferManager(private val context: Activity) {
 
     /** Switch to receive mode */
     fun switchToReceiveMode() {
+        Log.d(TAG, "switchToReceiveMode: Switching to receive mode")
         // First, disable reader mode if we were in send mode
         if (appState == AppState.SENDING) {
             disableReaderMode()
             // Reset NdefProcessor write mode
             ndefProcessor.setWriteMode(false)
+            
+            // Also reset the CardEmulationService's NdefProcessor if available
+            CardEmulationService.instance?.ndefProcessor?.setWriteMode(false)
         }
 
         // Update state
@@ -351,6 +367,7 @@ class TransferManager(private val context: Activity) {
 
     /** Setup data receiver for NDEF card emulation */
     fun setupDataReceiver() {
+        Log.d(TAG, "setupDataReceiver: Setting up data receiver")
         // If the service instance is null, the service might have been destroyed and not yet
         // restarted
         if (CardEmulationService.instance == null) {
@@ -442,6 +459,7 @@ class TransferManager(private val context: Activity) {
 
     /** Setup NDEF data receiver for bridging with the CardEmulationService */
     private fun setupNdefDataReceiver() {
+        Log.d(TAG, "setupNdefDataReceiver: Setting up NDEF data receiver")
         val cardEmulationService = CardEmulationService.instance
         if (cardEmulationService == null) {
             Log.d(TAG, "CardEmulationService instance is null, cannot setup NDEF data receiver")
@@ -480,6 +498,9 @@ class TransferManager(private val context: Activity) {
             // If in sending mode and we have a message, set it
             if (appState == AppState.SENDING && lastSentMessage.isNotEmpty()) {
                 setMessageToSend(lastSentMessage)
+            } else {
+                // Ensure it's clear when in receive mode
+                setMessageToSend("ndef: clearing message")
             }
         }
 
@@ -488,21 +509,24 @@ class TransferManager(private val context: Activity) {
 
     /** Cancel any active transfer timeout */
     fun cancelTransferTimeout() {
+        Log.d(TAG, "cancelTransferTimeout: Cancelling transfer timeout")
         chunkwiseTransferManager.cancelTransferTimeout()
     }
 
     /** Enable reader mode for NFC */
     fun enableReaderModeForWriting() {
+        Log.d(TAG, "enableReaderModeForWriting: Enabling reader mode for writing")
         nfcAdapter?.enableReaderMode(
                 context,
                 { tag -> handleTagDiscovered(tag) },
-                NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK,
+                NfcAdapter.FLAG_READER_NFC_A,
                 null
         )
     }
 
     /** Disable reader mode for NFC */
     fun disableReaderMode() {
+        Log.d(TAG, "disableReaderMode: Disabling reader mode")
         nfcAdapter?.disableReaderMode(context)
     }
 
@@ -844,10 +868,14 @@ class TransferManager(private val context: Activity) {
 
     /** Set the message to send */
     private fun setMessageToSend(message: String) {
+        Log.d(TAG, "setMessageToSend: Setting message to send: $message")
+        if (message.isEmpty()) {
+            Log.d(TAG, "setMessageToSend: Trying to set empty message")
+        }
         // Set the message in the service
         CardEmulationService.instance?.messageToShare = message
         // Also set the message in the NdefProcessor
-        ndefProcessor.setMessageToSend(message)
+        ndefProcessor.setMessageToSend("ndef " + message)
     }
 
     /**
