@@ -109,11 +109,12 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
                                         .show()
                             }
 
-                            // If we're in receive mode, ensure the service has our listeners
+                            // If we're in receive mode, ensure the service has our message
                             if (appState == AppState.RECEIVING) {
                                 mainHandler.postDelayed(
                                         {
-                                            transferManager.setupDataReceiver()
+                                            // TransferManager will handle setting up the data receiver
+                                            // Just need to set the current message
                                             transferManager.setCardEmulationMessage(
                                                     etMessage.text.toString()
                                             )
@@ -288,9 +289,6 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
             // Only switch to receive mode if we're not already in send mode
             if (appState != AppState.SENDING) {
                 transferManager.switchToReceiveMode()
-                
-                // Set up the data receiver
-                transferManager.setupDataReceiver()
                 
                 // Set the current message for the CardEmulationService
                 transferManager.setCardEmulationMessage(etMessage.text.toString())

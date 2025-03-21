@@ -84,7 +84,7 @@ class TransferManager(private val context: Activity) {
                             Log.d(TAG, "CardEmulationService started, registering listeners")
                             mainHandler.postDelayed(
                                     {
-                                        setupDataReceiver()
+                                        initializeReceiveMode()
                                         // Request the service to deliver any pending messages
                                         val registerIntent =
                                                 Intent(
@@ -344,25 +344,26 @@ class TransferManager(private val context: Activity) {
             intent.action = Intent.ACTION_MAIN
             context.startService(intent)
 
-            // Set up the message and listener after a short delay
-            mainHandler.postDelayed(
-                    {
-                        setupDataReceiver()
-                        // Also setup NDEF message handling
-                        setupNdefDataReceiver()
-                    },
-                    300
-            ) // Longer delay to ensure service is up
+            // When service starts, it will broadcast ACTION_SERVICE_STARTED
+            // The serviceLifecycleReceiver will handle setting up the data receiver
+            // We don't need to call setupDataReceiver() here
         } else {
-            // Set up the message and listener immediately
-            setupDataReceiver()
-            // Also setup NDEF message handling
-            setupNdefDataReceiver()
+            // Set up the data receiver and NDEF handling in a single call
+            initializeReceiveMode()
         }
 
         chunkwiseTransferManager.cancelTransferTimeout()
         
         Log.d(TAG, "Switched to receive mode")
+    }
+
+    /** 
+     * Initialize receive mode by setting up all required components 
+     * This single method consolidates all setup required for receive mode
+     */
+    private fun initializeReceiveMode() {
+        setupDataReceiver()
+        setupNdefDataReceiver()
     }
 
     /** Setup data receiver for NDEF card emulation */
@@ -848,8 +849,8 @@ class TransferManager(private val context: Activity) {
                         startIntent.action = Intent.ACTION_MAIN
                         context.startService(startIntent)
 
-                        // Re-register listeners after a short delay
-                        mainHandler.postDelayed({ setupDataReceiver() }, 500)
+                        // Service start will trigger serviceLifecycleReceiver which calls initializeReceiveMode
+                        // No need to explicitly call setupDataReceiver here
                     },
                     100
             )
