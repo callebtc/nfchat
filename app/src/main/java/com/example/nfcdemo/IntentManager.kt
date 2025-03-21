@@ -48,6 +48,7 @@ class IntentManager(
      */
     fun setBackgroundNfcEnabled(enabled: Boolean) {
         backgroundNfcEnabled = enabled
+        Log.d(TAG, "Background NFC setting set: enabled=$backgroundNfcEnabled")
     }
     
     /**
@@ -190,6 +191,7 @@ class IntentManager(
             if (appState == AppState.RECEIVING) {
                 // Stop the CardEmulationService
                 val serviceIntent = Intent(context, CardEmulationService::class.java)
+                Log.d(TAG, "handleIncomingShareIntent: Stopping CardEmulationService")
                 context.stopService(serviceIntent)
             }
             

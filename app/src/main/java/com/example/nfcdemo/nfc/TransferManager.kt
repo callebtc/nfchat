@@ -254,7 +254,6 @@ class TransferManager(private val context: Activity) {
 
     /** Toggle between send and receive modes */
     fun toggleMode() {
-        Log.d(TAG, "toggleMode: Toggling mode from ${appState} to ${AppState.RECEIVING}")
         when (appState) {
             AppState.SENDING -> {
                 // If in send mode, switch to receive mode
@@ -294,7 +293,8 @@ class TransferManager(private val context: Activity) {
         if (appState == AppState.RECEIVING) {
             // Stop the CardEmulationService
             val intent = Intent(context, CardEmulationService::class.java)
-            context.stopService(intent)
+            Log.d(TAG, "switchToSendMode: NOT Stopping CardEmulationService")
+            // context.stopService(intent)
         }
 
         // Update state
@@ -444,9 +444,6 @@ class TransferManager(private val context: Activity) {
             }
         }
 
-        // Tell the service that we are the active UI component for card emulation
-        registerAsActiveUiComponent()
-
         // Only setup the message to be shared if we're in send mode or if it was already set before
         if (CardEmulationService.instance?.messageToShare != null) {
             // If in sending mode and we have a message, set it
@@ -455,7 +452,7 @@ class TransferManager(private val context: Activity) {
             }
         }
 
-        Log.d(TAG, "NDEF data receiver setup complete")
+        Log.d(TAG, "setupDataReceiver: NDEF data receiver setup complete")
     }
 
     /** Setup NDEF data receiver for bridging with the CardEmulationService */
@@ -505,7 +502,7 @@ class TransferManager(private val context: Activity) {
             }
         }
 
-        Log.d(TAG, "NDEF data receiver setup complete")
+        Log.d(TAG, "private setupDataReceiver: NDEF data receiver setup complete")
     }
 
     /** Cancel any active transfer timeout */
@@ -810,6 +807,7 @@ class TransferManager(private val context: Activity) {
         // If we're not in receive mode anymore, stop the service
         if (appState != AppState.RECEIVING) {
             val intent = Intent(context, CardEmulationService::class.java)
+            Log.d(TAG, "Transfermanager.cleanup: Stopping CardEmulationService")
             context.stopService(intent)
         }
     }
@@ -837,9 +835,10 @@ class TransferManager(private val context: Activity) {
     /** Restart the CardEmulationService */
     private fun restartCardEmulationService() {
         try {
-            Log.d(TAG, "Restarting CardEmulationService")
+            Log.d(TAG, "restartCardEmulationService: Restarting CardEmulationService")
             // First stop any existing service
             val stopIntent = Intent(context, CardEmulationService::class.java)
+            Log.d(TAG, "restartCardEmulationService: Stopping CardEmulationService")
             context.stopService(stopIntent)
 
             // Wait a moment before starting again
@@ -847,6 +846,7 @@ class TransferManager(private val context: Activity) {
                     {
                         val startIntent = Intent(context, CardEmulationService::class.java)
                         startIntent.action = Intent.ACTION_MAIN
+                        Log.d(TAG, "restartCardEmulationService: Starting CardEmulationService")
                         context.startService(startIntent)
 
                         // Service start will trigger serviceLifecycleReceiver which calls initializeReceiveMode
@@ -857,14 +857,6 @@ class TransferManager(private val context: Activity) {
         } catch (e: Exception) {
             Log.e(TAG, "Error restarting service: ${e.message}")
         }
-    }
-
-    /** Register as the active UI component for card emulation */
-    private fun registerAsActiveUiComponent() {
-        // Just log that this is the active UI component
-        Log.d(TAG, "Registering MainActivity as active UI component for card emulation")
-        // No direct property access is needed - the service will communicate with this instance
-        // through the callbacks we've already set up
     }
 
     /** Set the message to send */

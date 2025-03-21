@@ -169,16 +169,23 @@ class NdefProcessor {
                 NDEF_RESPONSE_OK
             }
             Arrays.equals(fileId, NDEF_FILE_ID) -> {
-                // If in write mode and has a message to send, use that message
-                selectedFile =
-                        if (messageToSend.isNotEmpty()) {
-                            createNdefMessage(messageToSend)
-                        } else {
-                            Log.d(TAG, "NdefProcessor: No message to send, using default message")
-                            // Otherwise use default message
-                            createNdefMessage("hello-2")
-                        }
-                Log.d(TAG, "NdefProcessor: NDEF File selected, using message: $messageToSend")
+                if (isInWriteMode) {
+                    // if (messageToSend.isNotEmpty()) {
+                    //     selectedFile = createNdefMessage(messageToSend)
+                    // }
+                    // If in write mode and has a message to send, use that message
+                    selectedFile = createNdefMessage("debug: in write mode")
+                } else {
+                    selectedFile =
+                            if (messageToSend.isNotEmpty()) {
+                                createNdefMessage(messageToSend)
+                            } else {
+                                Log.d(TAG, "NdefProcessor: No message to send, using default message")
+                                // Otherwise use default message
+                                createNdefMessage("debug: hello")
+                            }
+                    Log.d(TAG, "NdefProcessor: NDEF File selected, using message: $messageToSend")
+                }
                 NDEF_RESPONSE_OK
             }
             else -> {
@@ -191,16 +198,15 @@ class NdefProcessor {
     /** Handles READ BINARY commands (00 B0 offset_MSB offset_LSB length) */
     private fun handleReadBinary(apdu: ByteArray): ByteArray {
         if (selectedFile == null || apdu.size < 5) return NDEF_RESPONSE_ERROR
-
-        // Always return "empty" data and success
-        val length = (apdu[4].toInt() and 0xFF).let { if (it == 0) 256 else it }
         val selectedFile = selectedFile!!
+        
+        val length = (apdu[4].toInt() and 0xFF).let { if (it == 0) 256 else it }
         val offset = ((apdu[2].toInt() and 0xFF) shl 8) or (apdu[3].toInt() and 0xFF)
-
         if (offset + length > selectedFile.size) return NDEF_RESPONSE_ERROR
 
         val data = selectedFile.sliceArray(offset until offset + length)
         val response = byteArrayOf(*data, *NDEF_RESPONSE_OK)
+        
         Log.d(TAG, "NdefProcessor: READ BINARY requested ${length} bytes at offset ${offset}")
         Log.d(TAG, "NdefProcessor: READ BINARY response: ${byteArrayToHex(response)}")
         return response

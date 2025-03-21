@@ -83,7 +83,6 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
                                         true
                                 )
                         intentManager.setBackgroundNfcEnabled(backgroundNfcEnabled)
-                        Log.d(TAG, "Background NFC setting changed: enabled=$backgroundNfcEnabled")
                     }
                 }
             }
@@ -274,7 +273,6 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
                         AppConstants.DefaultSettings.ENABLE_BACKGROUND_NFC
                 )
         intentManager.setBackgroundNfcEnabled(backgroundNfcEnabled)
-        Log.d(TAG, "Initial background NFC setting: enabled=$backgroundNfcEnabled")
     }
 
     /**
