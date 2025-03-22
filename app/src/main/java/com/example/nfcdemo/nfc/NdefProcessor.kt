@@ -119,7 +119,7 @@ class NdefProcessor {
     var onNdefTextReceived: ((String) -> Unit)? = null
 
     // Flag to indicate if the processor is in write mode
-    private var isInWriteMode: Boolean = false
+    // private var isInWriteMode: Boolean = false
 
     // set to NDEF_FILE or dynamically created message
     private var ndefData = ByteArray(NDEF_MAX_MESSAGE_SIZE)
@@ -133,10 +133,10 @@ class NdefProcessor {
     }
 
     /** Set whether the processor is in write mode */
-    fun setWriteMode(enabled: Boolean) {
-        isInWriteMode = enabled
-        Log.d(TAG, "NdefProcessor: Write mode set to $enabled")
-    }
+    // fun setWriteMode(enabled: Boolean) {
+    //     isInWriteMode = enabled
+    //     Log.d(TAG, "NdefProcessor: Write mode set to $enabled")
+    // }
 
     /**
      * Schedules deletion of messageToSend after delay.
@@ -193,10 +193,10 @@ class NdefProcessor {
     /** Processes an APDU command and returns the appropriate response */
     fun processCommandApdu(commandApdu: ByteArray): ByteArray {
         // When not in write mode, act as if the tag doesn't exist by returning error for all commands
-        if (isInWriteMode) {
-            Log.d(TAG, "NdefProcessor: Not in read mode, ignoring APDU: ${byteArrayToHex(commandApdu)}")
-            return NDEF_RESPONSE_ERROR
-        }
+        // if (isInWriteMode) {
+        //     Log.d(TAG, "NdefProcessor: Not in read mode, ignoring APDU: ${byteArrayToHex(commandApdu)}")
+        //     return NDEF_RESPONSE_ERROR
+        // }
         
         // Check if NDEF AID is selected
         if (Arrays.equals(commandApdu, NDEF_SELECT_AID)) {
@@ -236,11 +236,11 @@ class NdefProcessor {
     private fun handleSelectFile(apdu: ByteArray): ByteArray {
         val fileId = apdu.sliceArray(5 until 7)
         
-        // If we're not in write mode, act as if the tag doesn't exist by returning error
-        if (isInWriteMode) {
-            Log.d(TAG, "NdefProcessor: Not in read mode, acting as non-existent tag")
-            return NDEF_RESPONSE_ERROR
-        }
+        // // If we're not in write mode, act as if the tag doesn't exist by returning error
+        // if (isInWriteMode) {
+        //     Log.d(TAG, "NdefProcessor: Not in read mode, acting as non-existent tag")
+        //     return NDEF_RESPONSE_ERROR
+        // }
         if (messageToSend.isEmpty()) {
             Log.d(TAG, "NdefProcessor: No message to send, returning error")
             return NDEF_RESPONSE_ERROR

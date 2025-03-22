@@ -243,13 +243,16 @@ class TransferManager(private val context: Activity) {
         // CardEmulationService.instance?.ndefProcessor?.setMessageToSend(message)
         setMessageToSend(message)
         // Also set the write mode based on current state
-        ndefProcessor.setWriteMode(appState == AppState.SENDING)
-        CardEmulationService.instance?.ndefProcessor?.setWriteMode(appState == AppState.SENDING)
+        // ndefProcessor.setWriteMode(appState == AppState.SENDING)
+        // CardEmulationService.instance?.ndefProcessor?.setWriteMode(appState == AppState.SENDING)
     }
 
-    /** Get the last sent message */
-    fun getLastSentMessage(): String {
-        return lastSentMessage
+    /** Clear the last sent message */
+    fun clearLastSentMessage() {
+        lastSentMessage = ""
+        setMessageToSend("")
+        ndefProcessor.setMessageToSend("")
+        
     }
 
     /** Toggle between send and receive modes */
@@ -303,10 +306,10 @@ class TransferManager(private val context: Activity) {
         onStatusChanged?.invoke(context.getString(R.string.status_send_mode))
 
         // Set current message on the service
-        setCardEmulationMessage(lastSentMessage)
+        // setCardEmulationMessage(lastSentMessage)
 
         // Configure NdefProcessor for write mode
-        ndefProcessor.setWriteMode(true)
+        // ndefProcessor.setWriteMode(true)
         setMessageToSend(lastSentMessage)
         // ndefProcessor.setMessageToSend(lastSentMessage)
         
@@ -327,10 +330,10 @@ class TransferManager(private val context: Activity) {
         if (appState == AppState.SENDING) {
             disableReaderMode()
             // Reset NdefProcessor write mode
-            ndefProcessor.setWriteMode(false)
+            // ndefProcessor.setWriteMode(false)
             
             // Also reset the CardEmulationService's NdefProcessor if available
-            CardEmulationService.instance?.ndefProcessor?.setWriteMode(false)
+            // CardEmulationService.instance?.ndefProcessor?.setWriteMode(false)
         }
 
         // Update state
@@ -491,15 +494,19 @@ class TransferManager(private val context: Activity) {
             }
 
             // Ensure write mode is set correctly based on current state
-            setWriteMode(appState == AppState.SENDING)
-
-            // If in sending mode and we have a message, set it
-            if (appState == AppState.SENDING && lastSentMessage.isNotEmpty()) {
+            // setWriteMode(appState == AppState.SENDING)
+            if (lastSentMessage.isNotEmpty()) {
                 setMessageToSend(lastSentMessage)
             } else {
-                // Ensure it's clear when in receive mode
-                setMessageToSend(lastSentMessage)
+                setMessageToSend("")
             }
+            // If in sending mode and we have a message, set it
+            // if (appState == AppState.SENDING && lastSentMessage.isNotEmpty()) {
+            //     setMessageToSend(lastSentMessage)
+            // } else {
+            //     // Ensure it's clear when in receive mode
+            //     setMessageToSend(lastSentMessage)
+            // }
         }
 
         Log.d(TAG, "private setupDataReceiver: NDEF data receiver setup complete")
