@@ -272,8 +272,8 @@ class NdefProcessor {
             }
             Arrays.equals(fileId, NDEF_FILE_ID) -> {
                 if (messageToSend.isEmpty()) {
-                    Log.d(TAG, "NdefProcessor: No message to send, returning NOT AN error")
-                    selectedFile = createNdefMessage("ndef: empty")
+                    Log.d(TAG, "NdefProcessor: No message to send, returning empty message")
+                    selectedFile = createNdefMessage("")
                     return NDEF_RESPONSE_OK
                 }
                 Log.d(TAG, "NdefProcessor: NDEF File selected, using message: $messageToSend")
