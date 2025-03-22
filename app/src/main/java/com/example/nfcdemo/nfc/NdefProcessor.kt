@@ -5,6 +5,8 @@ import android.content.Intent
 import android.nfc.NdefMessage
 import android.nfc.NfcAdapter
 import android.nfc.Tag
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import com.example.nfcdemo.R
@@ -19,6 +21,9 @@ import kotlin.byteArrayOf
 class NdefProcessor {
     companion object {
         private const val TAG = "NdefProcessor"
+        
+        // Delay in milliseconds before messageToSend is cleared
+        private const val DELETE_MSG_TO_SEND_DELAY = 2000L
 
         // Command Headers
         private val NDEF_SELECT_FILE_HEADER =
@@ -102,6 +107,10 @@ class NdefProcessor {
 
     // Message to be sent when in write mode
     private var messageToSend: String = ""
+    
+    // Handler for delayed message deletion
+    private val handler = Handler(Looper.getMainLooper())
+    private var deleteMessageRunnable: Runnable? = null
 
     // Callback for when a message is received via UPDATE BINARY
     var onNdefMessageReceived: ((MessageData) -> Unit)? = null
@@ -129,6 +138,35 @@ class NdefProcessor {
         Log.d(TAG, "NdefProcessor: Write mode set to $enabled")
     }
 
+    /**
+     * Schedules deletion of messageToSend after delay.
+     * Cancels any existing scheduled deletions first.
+     */
+    private fun scheduleMessageDeletion() {
+        // Cancel any existing scheduled deletions
+        cancelScheduledMessageDeletion()
+        
+        // Create a new runnable to clear the message
+        deleteMessageRunnable = Runnable {
+            Log.d(TAG, "NdefProcessor: Clearing message to send after timeout")
+            messageToSend = ""
+            deleteMessageRunnable = null
+        }
+        
+        // Schedule the deletion after the delay
+        handler.postDelayed(deleteMessageRunnable!!, DELETE_MSG_TO_SEND_DELAY)
+    }
+    
+    /**
+     * Cancels any scheduled message deletion
+     */
+    private fun cancelScheduledMessageDeletion() {
+        deleteMessageRunnable?.let {
+            handler.removeCallbacks(it)
+            deleteMessageRunnable = null
+        }
+    }
+
     /** Create an NDEF message from a string */
     private fun createNdefMessage(message: String): ByteArray {
         val payload = message.toByteArray()
@@ -151,6 +189,48 @@ class NdefProcessor {
         Log.d(TAG, "NdefProcessor: Created NDEF message: ${byteArrayToHex(ndefData)}")
         return ndefData
     }
+    
+    /** Processes an APDU command and returns the appropriate response */
+    fun processCommandApdu(commandApdu: ByteArray): ByteArray {
+        // When not in write mode, act as if the tag doesn't exist by returning error for all commands
+        if (isInWriteMode) {
+            Log.d(TAG, "NdefProcessor: Not in read mode, ignoring APDU: ${byteArrayToHex(commandApdu)}")
+            return NDEF_RESPONSE_ERROR
+        }
+        
+        // Check if NDEF AID is selected
+        if (Arrays.equals(commandApdu, NDEF_SELECT_AID)) {
+            Log.d(TAG, "NdefProcessor: NDEF AID selected")
+            return NDEF_RESPONSE_OK
+        }
+
+        // Handle File Selection
+        if (commandApdu.size >= 7 &&
+                        Arrays.equals(commandApdu.sliceArray(0 until 4), NDEF_SELECT_FILE_HEADER)
+        ) {
+            Log.d(TAG, "NdefProcessor: SELECT FILE command received")
+            return handleSelectFile(commandApdu)
+        }
+
+        // Handle Read Binary
+        if (commandApdu.size >= 2 &&
+                        Arrays.equals(commandApdu.sliceArray(0 until 2), NDEF_READ_BINARY_HEADER)
+        ) {
+            Log.d(TAG, "NdefProcessor: READ BINARY command received")
+            return handleReadBinary(commandApdu)
+        }
+
+        // Handle Update Binary
+        if (commandApdu.size >= 2 &&
+                        Arrays.equals(commandApdu.sliceArray(0 until 2), NDEF_UPDATE_BINARY_HEADER)
+        ) {
+            Log.d(TAG, "NdefProcessor: UPDATE BINARY command received")
+            return handleUpdateBinary(commandApdu)
+        }
+
+        Log.d(TAG, "NdefProcessor: Invalid APDU received: ${byteArrayToHex(commandApdu)}")
+        return NDEF_RESPONSE_ERROR
+    }
 
     /** Handles SELECT FILE commands */
     private fun handleSelectFile(apdu: ByteArray): ByteArray {
@@ -161,6 +241,10 @@ class NdefProcessor {
             Log.d(TAG, "NdefProcessor: Not in read mode, acting as non-existent tag")
             return NDEF_RESPONSE_ERROR
         }
+        if (messageToSend.isEmpty()) {
+            Log.d(TAG, "NdefProcessor: No message to send, returning error")
+            return NDEF_RESPONSE_ERROR
+        }
         
         return when {
             Arrays.equals(fileId, CC_FILE_ID) -> {
@@ -169,24 +253,10 @@ class NdefProcessor {
                 NDEF_RESPONSE_OK
             }
             Arrays.equals(fileId, NDEF_FILE_ID) -> {
-                if (isInWriteMode) {
-                    // if (messageToSend.isNotEmpty()) {
-                    //     selectedFile = createNdefMessage(messageToSend)
-                    // }
-                    // If in write mode and has a message to send, use that message
-                    selectedFile = createNdefMessage("debug: in write mode")
-                } else {
-                    selectedFile =
-                            if (messageToSend.isNotEmpty()) {
-                                createNdefMessage(messageToSend)
-                            } else {
-                                Log.d(TAG, "NdefProcessor: No message to send, using default message")
-                                // Otherwise use default message
-                                createNdefMessage("debug: hello")
-                            }
-                    Log.d(TAG, "NdefProcessor: NDEF File selected, using message: $messageToSend")
-                }
-                NDEF_RESPONSE_OK
+                Log.d(TAG, "NdefProcessor: NDEF File selected, using message: $messageToSend")
+                selectedFile = createNdefMessage(messageToSend)
+                scheduleMessageDeletion()
+                return NDEF_RESPONSE_OK
             }
             else -> {
                 Log.e(TAG, "NdefProcessor: Unknown file selected")
@@ -209,6 +279,7 @@ class NdefProcessor {
         
         Log.d(TAG, "NdefProcessor: READ BINARY requested ${length} bytes at offset ${offset}")
         Log.d(TAG, "NdefProcessor: READ BINARY response: ${byteArrayToHex(response)}")
+        Log.d(TAG, "NdefProcessor: READ BINARY response string: ${String(data)}")
         return response
     }
 
@@ -278,12 +349,12 @@ class NdefProcessor {
     
         var offset = 0
         var totalLength = 0
-    
         // Detect framing:
+    
+            Log.d(TAG, "Type 2 style NDEF TLV")
         // Type 2: starts with TLV tag 0x03 followed by one byte length
         // Type 4: first two bytes form the NDEF file length
         if (ndefData.isNotEmpty() && ndefData[0] == 0x03.toByte()) {
-            Log.d(TAG, "Type 2 style NDEF TLV")
             if (ndefData.size < 2) {
                 Log.e(TAG, "Invalid NDEF data")
                 return
@@ -313,6 +384,7 @@ class NdefProcessor {
                 typeFieldStart = offset + 3
             } else { // Normal record: payload length is 4 bytes
                 payloadLength = ((ndefData[offset + 2].toInt() and 0xFF) shl 24) or
+                Log.e(TAG, "Payload start index out of bounds")
                         ((ndefData[offset + 3].toInt() and 0xFF) shl 16) or
                         ((ndefData[offset + 4].toInt() and 0xFF) shl 8) or
                         (ndefData[offset + 5].toInt() and 0xFF)
@@ -328,7 +400,6 @@ class NdefProcessor {
             // Payload starts immediately after the type field
             val payloadStart = typeFieldStart + typeLength
             if (payloadStart >= ndefData.size) {
-                Log.e(TAG, "Payload start index out of bounds")
                 return
             }
     
@@ -338,10 +409,10 @@ class NdefProcessor {
             val languageCodeLength = status.toInt() and 0x3F
             val textStart = payloadStart + 1 + languageCodeLength
             val textLength = payloadLength - 1 - languageCodeLength
+                return
     
             if (textStart + textLength > ndefData.size) {
                 Log.e(TAG, "Text extraction bounds exceed data size.")
-                return
             }
     
             val textBytes = ndefData.sliceArray(textStart until textStart + textLength)
@@ -355,49 +426,6 @@ class NdefProcessor {
         } catch (e: Exception) {
             Log.e(TAG, "Error extracting text from NDEF message: ${e.message}")
         }
-    }
-
-
-    /** Processes an APDU command and returns the appropriate response */
-    fun processCommandApdu(commandApdu: ByteArray): ByteArray {
-        // When not in write mode, act as if the tag doesn't exist by returning error for all commands
-        if (isInWriteMode) {
-            Log.d(TAG, "NdefProcessor: Not in read mode, ignoring APDU: ${byteArrayToHex(commandApdu)}")
-            return NDEF_RESPONSE_ERROR
-        }
-        
-        // Check if NDEF AID is selected
-        if (Arrays.equals(commandApdu, NDEF_SELECT_AID)) {
-            Log.d(TAG, "NdefProcessor: NDEF AID selected")
-            return NDEF_RESPONSE_OK
-        }
-
-        // Handle File Selection
-        if (commandApdu.size >= 7 &&
-                        Arrays.equals(commandApdu.sliceArray(0 until 4), NDEF_SELECT_FILE_HEADER)
-        ) {
-            Log.d(TAG, "NdefProcessor: SELECT FILE command received")
-            return handleSelectFile(commandApdu)
-        }
-
-        // Handle Read Binary
-        if (commandApdu.size >= 2 &&
-                        Arrays.equals(commandApdu.sliceArray(0 until 2), NDEF_READ_BINARY_HEADER)
-        ) {
-            Log.d(TAG, "NdefProcessor: READ BINARY command received")
-            return handleReadBinary(commandApdu)
-        }
-
-        // Handle Update Binary
-        if (commandApdu.size >= 2 &&
-                        Arrays.equals(commandApdu.sliceArray(0 until 2), NDEF_UPDATE_BINARY_HEADER)
-        ) {
-            Log.d(TAG, "NdefProcessor: UPDATE BINARY command received")
-            return handleUpdateBinary(commandApdu)
-        }
-
-        Log.d(TAG, "NdefProcessor: Invalid APDU received: ${byteArrayToHex(commandApdu)}")
-        return NDEF_RESPONSE_ERROR
     }
 
     fun getReceivedMessage(): String {

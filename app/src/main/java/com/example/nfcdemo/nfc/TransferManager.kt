@@ -498,7 +498,7 @@ class TransferManager(private val context: Activity) {
                 setMessageToSend(lastSentMessage)
             } else {
                 // Ensure it's clear when in receive mode
-                setMessageToSend("ndef: clearing message")
+                setMessageToSend(lastSentMessage)
             }
         }
 
@@ -578,7 +578,7 @@ class TransferManager(private val context: Activity) {
                 }
                 else -> {
                     // Request data from the HCE device
-                    requestDataFromTag(isoDep)
+                    // requestDataFromTag(isoDep)
                 }
             }
         } catch (e: IOException) {
@@ -598,42 +598,44 @@ class TransferManager(private val context: Activity) {
         }
     }
 
-    /** Request data from an NFC tag */
-    private fun requestDataFromTag(isoDep: IsoDep) {
-        Log.d(TAG, "requestDataFromTag: Requesting data from tag")
-        val getCommand = NfcProtocol.createGetDataCommand()
-        val getResult = isoDep.transceive(getCommand)
+    // /** Request data from an NFC tag */
+    // private fun requestDataFromTag(isoDep: IsoDep) {
+    //     Log.d(TAG, "requestDataFromTag: Requesting data from tag")
+    //     val getCommand = NfcProtocol.createGetDataCommand()
+    //     val getResult = isoDep.transceive(getCommand)
 
-        if (NfcProtocol.isSuccess(getResult)) {
-            // Extract the data (remove the status word)
-            val dataBytes = getResult.copyOfRange(0, getResult.size - 2)
-            val receivedMessage = String(dataBytes, Charset.forName("UTF-8"))
+    //     if (NfcProtocol.isSuccess(getResult)) {
+    //         Log.d(TAG, "requestDataFromTag: Data received from tag")
+    //         // Extract the data (remove the status word)
+    //         val dataBytes = getResult.copyOfRange(0, getResult.size - 2)
+    //         val receivedMessage = String(dataBytes, Charset.forName("UTF-8"))
+    //         Log.d(TAG, "requestDataFromTag: Received message: $receivedMessage")
 
-            // Parse the JSON message
-            val messageData = MessageData.fromJson(receivedMessage)
+    //         // Parse the JSON message
+    //         val messageData = MessageData.fromJson(receivedMessage)
 
-            if (messageData != null) {
-                // Check if this is a duplicate message based on ID
-                if (messageData.id != lastReceivedMessageId) {
-                    lastReceivedMessageId = messageData.id
+    //         if (messageData != null) {
+    //             // Check if this is a duplicate message based on ID
+    //             if (messageData.id != lastReceivedMessageId) {
+    //                 lastReceivedMessageId = messageData.id
 
-                    context.runOnUiThread {
-                        // Notify that a message was received
-                        onMessageReceived?.invoke(messageData, false)
-                        onStatusChanged?.invoke(context.getString(R.string.status_receive_mode))
+    //                 context.runOnUiThread {
+    //                     // Notify that a message was received
+    //                     onMessageReceived?.invoke(messageData, false)
+    //                     onStatusChanged?.invoke(context.getString(R.string.status_receive_mode))
 
-                        // Vibrate on message received
-                        VibrationUtils.vibrate(context, 200)
-                    }
-                } else {
-                    Log.d(TAG, "Duplicate message received (same ID), ignoring: ${messageData.id}")
-                    // Don't update UI or vibrate for duplicate messages
-                }
-            } else {
-                Log.e(TAG, "Failed to parse message data: $receivedMessage")
-            }
-        }
-    }
+    //                     // Vibrate on message received
+    //                     VibrationUtils.vibrate(context, 200)
+    //                 }
+    //             } else {
+    //                 Log.d(TAG, "Duplicate message received (same ID), ignoring: ${messageData.id}")
+    //                 // Don't update UI or vibrate for duplicate messages
+    //             }
+    //         } else {
+    //             Log.e(TAG, "Failed to parse message data: $receivedMessage")
+    //         }
+    //     }
+    // }
 
     /** Send a regular (non-chunked) message */
     private fun sendRegularMessage(isoDep: IsoDep, message: String) {
@@ -866,7 +868,7 @@ class TransferManager(private val context: Activity) {
             Log.d(TAG, "setMessageToSend: Trying to set empty message")
         }
         // Set the message in the service
-        CardEmulationService.instance?.messageToShare = message
+        CardEmulationService.instance?.setMessageToSend(message)
         // Also set the message in the NdefProcessor
         ndefProcessor.setMessageToSend("ndef " + message)
     }

@@ -152,6 +152,10 @@ class CardEmulationService : HostApduService() {
                 }
             }
 
+    fun setMessageToSend(message: String) {
+        messageToShare = message
+    }
+
     /** Check if currently receiving a chunked message */
     fun isReceivingChunkedMessage(): Boolean {
         return isReceivingChunkedMessage
@@ -397,7 +401,7 @@ class CardEmulationService : HostApduService() {
         }
 
         // If not an NDEF command, process as a regular NFC command
-
+        Log.d(TAG, "Not an NDEF command, processing as regular NFC command")
         // Check if this is a SELECT AID command
         if (isSelectAidCommand(commandApdu)) {
             Log.d(TAG, "Received SELECT AID command")
@@ -406,14 +410,12 @@ class CardEmulationService : HostApduService() {
 
         // Convert the command to a string
         val commandString = String(commandApdu, Charset.forName("UTF-8"))
-        Log.d(TAG, "Command string: $commandString")
-
         // Handle different commands
         return when {
-            // GET_DATA command - send the current message
-            commandString == NfcProtocol.CMD_GET_DATA -> {
-                handleGetDataCommand()
-            }
+            // // GET_DATA command - send the current message
+            // commandString == NfcProtocol.CMD_GET_DATA -> {
+            //     handleGetDataCommand()
+            // }
 
             // SEND_DATA command - receive a message
             commandString.startsWith(NfcProtocol.CMD_SEND_DATA) -> {
@@ -484,22 +486,22 @@ class CardEmulationService : HostApduService() {
         }
     }
 
-    /** Handle the GET_DATA command */
-    private fun handleGetDataCommand(): ByteArray {
-        Log.d(TAG, "Handling GET_DATA command")
+    // /** Handle the GET_DATA command */
+    // private fun handleGetDataCommand(): ByteArray {
+    //     Log.d(TAG, "Handling GET_DATA command")
 
-        // Create a MessageData object with the message content
-        val messageData = MessageData(messageToShare)
-        val jsonMessage = messageData.toJson()
+    //     // Create a MessageData object with the message content
+    //     val messageData = MessageData(messageToShare)
+    //     val jsonMessage = messageData.toJson()
 
-        // Combine the message with the status word
-        val messageBytes = jsonMessage.toByteArray(Charset.forName("UTF-8"))
-        val response = ByteArray(messageBytes.size + 2)
-        System.arraycopy(messageBytes, 0, response, 0, messageBytes.size)
-        System.arraycopy(NfcProtocol.SELECT_OK_SW, 0, response, messageBytes.size, 2)
+    //     // Combine the message with the status word
+    //     val messageBytes = jsonMessage.toByteArray(Charset.forName("UTF-8"))
+    //     val response = ByteArray(messageBytes.size + 2)
+    //     System.arraycopy(messageBytes, 0, response, 0, messageBytes.size)
+    //     System.arraycopy(NfcProtocol.SELECT_OK_SW, 0, response, messageBytes.size, 2)
 
-        return response
-    }
+    //     return response
+    // }
 
     /** Handle the SEND_DATA command */
     private fun handleSendDataCommand(commandString: String): ByteArray {
