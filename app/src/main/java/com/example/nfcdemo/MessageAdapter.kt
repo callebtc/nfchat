@@ -278,6 +278,35 @@ class MessageAdapter(private val context: Context) : RecyclerView.Adapter<Recycl
     }
     
     /**
+     * Find a message by its messageId and mark it as delivered
+     * @param messageId The unique messageId of the message
+     * @return true if the message was found and marked, false otherwise
+     */
+    fun markMessageAsDeliveredById(messageId: String): Boolean {
+        for (i in messages.indices) {
+            if (messages[i].messageId == messageId && messages[i].isSent) {
+                markMessageAsDelivered(i)
+                return true
+            }
+        }
+        return false
+    }
+    
+    /**
+     * Find a message by its messageId
+     * @param messageId The unique messageId of the message
+     * @return The position of the message, or -1 if not found
+     */
+    fun findMessagePositionById(messageId: String): Int {
+        for (i in messages.indices) {
+            if (messages[i].messageId == messageId) {
+                return i
+            }
+        }
+        return -1
+    }
+    
+    /**
      * Set a message as pending (being sent)
      * @param position The position of the message to set as pending, or -1 to clear
      */

@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.example.nfcdemo.MessageAdapter
 import com.example.nfcdemo.data.AppConstants
 import com.example.nfcdemo.data.MessageDbHelper
 import com.example.nfcdemo.data.SettingsContract
@@ -91,14 +92,17 @@ class CardEmulationService : HostApduService() {
     // Database helper instance
     private lateinit var dbHelper: MessageDbHelper
 
-    // Message to be shared when requested
-    internal var messageToShare: String = ""
+    // Store the full Message object
+    private var messageObj: MessageAdapter.Message? = null
 
     // Callback to notify MainActivity when data is received
     var onDataReceivedListener: ((MessageData) -> Unit)? = null
 
     // Callback to notify MainActivity when NDEF message is received
     var onNdefMessageReceivedListener: ((String) -> Unit)? = null
+    
+    // Callback to notify TransferManager when a message is sent
+    var onMessageSent: ((String) -> Unit)? = null
 
     // Chunked message transfer state
     private var isReceivingChunkedMessage = false
@@ -152,8 +156,21 @@ class CardEmulationService : HostApduService() {
                 }
             }
 
+    /** 
+     * Legacy method to set the message text to send
+     * @deprecated Use setMessageObject instead
+     */
     fun setMessageToSend(message: String) {
-        messageToShare = message
+        // Create a temporary Message object with the string content
+        val tempMessage = MessageAdapter.Message(message, true)
+        setMessageObject(tempMessage)
+    }
+    
+    /** Set the Message object to send */
+    fun setMessageObject(message: MessageAdapter.Message) {
+        messageObj = message
+        // Also update the NdefProcessor with the message object
+        ndefProcessor.setMessageObj(message)
     }
 
     /** Check if currently receiving a chunked message */
@@ -453,6 +470,11 @@ class CardEmulationService : HostApduService() {
 
             // Process the message data similar to our regular message handler
             processReceivedMessageData(messageData)
+        }
+        
+        // Connect the NdefProcessor's onMessageSent callback to ours
+        ndefProcessor.onMessageSent = { messageId ->
+            onMessageSent?.invoke(messageId)
         }
     }
 

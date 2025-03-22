@@ -221,10 +221,18 @@ class IntentManager(
                             
                             // Store the message to send
                             val message = etMessage.text.toString()
-                            transferManager.setLastSentMessage(message)
                             
-                            // Add the message to the chat as a sent message and save to database
-                            messageSaveCallback?.saveAndAddMessage(message, true)
+                            // Create a message object
+                            val position = messageSaveCallback?.saveAndAddMessage(message, true) ?: -1
+                            
+                            if (position >= 0 && context is MainActivity) {
+                                // Get the message object and set it in the transfer manager
+                                val messageObj = context.getMessageAdapter().getItem(position)
+                                transferManager.setLastSentMessageObj(messageObj)
+                            } else {
+                                // Fallback to the string version
+                                transferManager.setLastSentMessage(message)
+                            }
                             
                             // Clear the input field after sending
                             etMessage.text.clear()

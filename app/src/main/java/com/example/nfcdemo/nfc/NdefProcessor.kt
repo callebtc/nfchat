@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
+import com.example.nfcdemo.MessageAdapter
 import com.example.nfcdemo.R
 import java.nio.charset.Charset
 import java.util.Arrays
@@ -23,7 +24,7 @@ class NdefProcessor {
         private const val TAG = "NdefProcessor"
         
         // Delay in milliseconds before messageToSend is cleared
-        private const val DELETE_MSG_TO_SEND_DELAY = 2000L
+        private const val DELETE_MSG_TO_SEND_DELAY = 500L
 
         // Command Headers
         private val NDEF_SELECT_FILE_HEADER =
@@ -108,6 +109,9 @@ class NdefProcessor {
     // Message to be sent when in write mode
     private var messageToSend: String = ""
     
+    // Store the full Message object
+    private var messageObj: MessageAdapter.Message? = null
+    
     // Handler for delayed message deletion
     private val handler = Handler(Looper.getMainLooper())
     private var deleteMessageRunnable: Runnable? = null
@@ -117,6 +121,9 @@ class NdefProcessor {
     
     // Callback for received text from an NDEF intent
     var onNdefTextReceived: ((String) -> Unit)? = null
+    
+    // Callback for when message is sent and we need to notify
+    var onMessageSent: ((String) -> Unit)? = null
 
     // Flag to indicate if the processor is in write mode
     // private var isInWriteMode: Boolean = false
@@ -130,6 +137,13 @@ class NdefProcessor {
     fun setMessageToSend(message: String) {
         messageToSend = message
         Log.d(TAG, "NdefProcessor: Message to send set: $message")
+    }
+    
+    /** Set the Message object to be sent when in write mode */
+    fun setMessageObj(message: MessageAdapter.Message) {
+        messageObj = message
+        messageToSend = message.content
+        Log.d(TAG, "NdefProcessor: Message object set: ${message.content}, ID: ${message.messageId}")
     }
 
     /** Set whether the processor is in write mode */
@@ -149,7 +163,14 @@ class NdefProcessor {
         // Create a new runnable to clear the message
         deleteMessageRunnable = Runnable {
             Log.d(TAG, "NdefProcessor: Clearing message to send after timeout")
+            // If we have a message object and onMessageSent callback, notify that message was sent
+            messageObj?.let { message ->
+                Log.d(TAG, "NdefProcessor: Notifying message was sent, ID: ${message.messageId}")
+                onMessageSent?.invoke(message.messageId)
+            }
+            
             messageToSend = ""
+            messageObj = null
             deleteMessageRunnable = null
         }
         
@@ -241,10 +262,7 @@ class NdefProcessor {
         //     Log.d(TAG, "NdefProcessor: Not in read mode, acting as non-existent tag")
         //     return NDEF_RESPONSE_ERROR
         // }
-        if (messageToSend.isEmpty()) {
-            Log.d(TAG, "NdefProcessor: No message to send, returning error")
-            return NDEF_RESPONSE_ERROR
-        }
+
         
         return when {
             Arrays.equals(fileId, CC_FILE_ID) -> {
@@ -253,6 +271,11 @@ class NdefProcessor {
                 NDEF_RESPONSE_OK
             }
             Arrays.equals(fileId, NDEF_FILE_ID) -> {
+                if (messageToSend.isEmpty()) {
+                    Log.d(TAG, "NdefProcessor: No message to send, returning NOT AN error")
+                    selectedFile = createNdefMessage("ndef: empty")
+                    return NDEF_RESPONSE_OK
+                }
                 Log.d(TAG, "NdefProcessor: NDEF File selected, using message: $messageToSend")
                 selectedFile = createNdefMessage(messageToSend)
                 scheduleMessageDeletion()
@@ -321,12 +344,21 @@ class NdefProcessor {
             // NDEF messages start with a length field
             val ndefLength = ((ndefData[0].toInt() and 0xFF) shl 8) or (ndefData[1].toInt() and 0xFF)
             // If we have the complete message already
-            if (ndefLength + 2 <= ndefData.size) {
-                processReceivedNdefMessage(ndefData)
+            if (ndefLength + 2 <= ndefData.size) { 
+                try {
+                    // Log.d(TAG, "NdefProcessor: Processing received NDEF message")
+                    // ndef data in string: 
+                    // Log.d(TAG, "NdefProcessor: NDEF data: ${String(ndefData)}")
+                    processReceivedNdefMessage(ndefData)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error processing received NDEF message: ${e.message}")
+                }
                 // clear the message
                 ndefData.fill(0)
                 // clear the selected file
                 selectedFile = null
+            } else {
+                Log.d(TAG, "NdefProcessor: Not all data received, waiting for more")
             }
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing received NDEF message: ${e.message}")
@@ -350,8 +382,8 @@ class NdefProcessor {
         var offset = 0
         var totalLength = 0
         // Detect framing:
-    
-            Log.d(TAG, "Type 2 style NDEF TLV")
+        
+        Log.d(TAG, "Type 2 style NDEF TLV")
         // Type 2: starts with TLV tag 0x03 followed by one byte length
         // Type 4: first two bytes form the NDEF file length
         if (ndefData.isNotEmpty() && ndefData[0] == 0x03.toByte()) {
@@ -375,7 +407,7 @@ class NdefProcessor {
             // Read record header starting at offset
             val header = ndefData[offset]
             val typeLength = ndefData[offset + 1].toInt() and 0xFF
-    
+            Log.d(TAG, "Type length: $typeLength")
             // Determine payload length field size based on the SR flag (0x10)
             var payloadLength = 0
             var typeFieldStart: Int
@@ -390,16 +422,17 @@ class NdefProcessor {
                         (ndefData[offset + 5].toInt() and 0xFF)
                 typeFieldStart = offset + 6
             }
-    
+            Log.d(TAG, "Type field start: $typeFieldStart")
             // Verify the record type is "T" (0x54) for a Text record
             if (ndefData[typeFieldStart] != 0x54.toByte()) {
                 Log.d(TAG, "NDEF message is not a Text Record. Found type: ${ndefData[typeFieldStart].toChar()}")
                 return
             }
-    
+
             // Payload starts immediately after the type field
             val payloadStart = typeFieldStart + typeLength
             if (payloadStart >= ndefData.size) {
+                Log.e(TAG, "Payload start index out of bounds")
                 return
             }
     
@@ -409,8 +442,8 @@ class NdefProcessor {
             val languageCodeLength = status.toInt() and 0x3F
             val textStart = payloadStart + 1 + languageCodeLength
             val textLength = payloadLength - 1 - languageCodeLength
-                return
-    
+            Log.d(TAG, "Text start: $textStart, Text length: $textLength")
+
             if (textStart + textLength > ndefData.size) {
                 Log.e(TAG, "Text extraction bounds exceed data size.")
             }

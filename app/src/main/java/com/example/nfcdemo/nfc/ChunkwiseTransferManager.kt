@@ -6,6 +6,7 @@ import android.nfc.tech.IsoDep
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import com.example.nfcdemo.MessageAdapter
 import com.example.nfcdemo.R
 import java.io.IOException
 
@@ -33,6 +34,9 @@ class ChunkwiseTransferManager(private val context: Context) {
     private var acknowledgedChunks = mutableSetOf<Int>()
     private var chunkSendAttempts = mutableMapOf<Int, Int>()
     private val MAX_SEND_ATTEMPTS = 3 // Default value, will be updated from settings
+
+    // Store the current message object
+    private var currentMessageObj: MessageAdapter.Message? = null
 
     // Transfer timeout handler
     var transferTimeoutHandler: Handler? = null
@@ -507,6 +511,28 @@ class ChunkwiseTransferManager(private val context: Context) {
         val jsonMessage = messageData.toJson()
 
         return jsonMessage.length > maxChunkSize
+    }
+
+    /** Check if a Message object needs to be sent in chunks */
+    fun needsChunkedTransfer(message: MessageAdapter.Message): Boolean {
+        // Create a MessageData object with the message content and a unique ID
+        val messageData = MessageData(message.content)
+        val jsonMessage = messageData.toJson()
+
+        return jsonMessage.length > maxChunkSize
+    }
+
+    /** Set the current Message object being processed */
+    fun setCurrentMessage(message: MessageAdapter.Message) {
+        currentMessageObj = message
+    }
+
+    /** Get the current Message object */
+    fun getCurrentMessage(): MessageAdapter.Message? = currentMessageObj
+
+    /** Clear the current Message object */
+    fun clearCurrentMessage() {
+        currentMessageObj = null
     }
 
     /** Handle communication errors with the NFC tag */

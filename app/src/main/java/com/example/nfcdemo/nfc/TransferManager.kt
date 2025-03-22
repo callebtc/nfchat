@@ -18,6 +18,7 @@ import android.util.Log
 import android.widget.Toast
 import com.example.nfcdemo.AppState
 import com.example.nfcdemo.CardEmulationService
+import com.example.nfcdemo.MessageAdapter
 import com.example.nfcdemo.R
 import com.example.nfcdemo.ui.VibrationUtils
 import java.io.IOException
@@ -32,7 +33,10 @@ class TransferManager(private val context: Activity) {
 
     // State management
     private var appState = AppState.IDLE
-    private var lastSentMessage: String = ""
+    
+    // Store the last message that was sent
+    private var lastSentMessageObj: MessageAdapter.Message? = null
+    
     private var lastReceivedMessageId: String = ""
 
     // NdefProcessor for handling NDEF operations
@@ -52,7 +56,7 @@ class TransferManager(private val context: Activity) {
     // Callbacks
     var onAppStateChanged: ((AppState) -> Unit)? = null
     var onStatusChanged: ((String) -> Unit)? = null
-    var onMessageSent: ((Int) -> Unit)? = null
+    var onMessageSent: ((String) -> Unit)? = null
     var onMessageReceived: ((MessageData, Boolean) -> Unit)? = null
 
     // Chunk transfer callbacks
@@ -124,22 +128,23 @@ class TransferManager(private val context: Activity) {
             }
 
     init {
-        // Initialize NFC adapter
+        Log.d(TAG, "TransferManager: Initializing")
+        // Get the default NFC adapter
         nfcAdapter = NfcAdapter.getDefaultAdapter(context)
 
-        // Set up chunked transfer manager callbacks
+        // Set up the NdefProcessor
+        setupNdefProcessor()
+
+        // Set up chunked transfer callbacks
         setupChunkwiseTransferCallbacks()
 
-        // Register service lifecycle receiver
-        val filter =
-                IntentFilter().apply {
-                    addAction(CardEmulationService.ACTION_SERVICE_STARTED)
-                    addAction(CardEmulationService.ACTION_SERVICE_DESTROYED)
-                }
-        context.registerReceiver(serviceLifecycleReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        // Set up foreground dispatch
+        setupForegroundDispatch()
 
-        // Start the service watchdog
-        startServiceWatchdog()
+        // Service lifecycle handling is set up separately
+        
+        // Schedule the service watchdog
+        mainHandler.postDelayed(serviceWatchdogRunnable, SERVICE_WATCHDOG_INTERVAL)
     }
 
     /** Set up callbacks for the chunked transfer manager */
@@ -151,17 +156,18 @@ class TransferManager(private val context: Activity) {
         chunkwiseTransferManager.onTransferCompleted = {
             context.runOnUiThread {
                 // Notify that the message was sent
-                onMessageSent?.invoke(-1) // -1 indicates the last message
+                val messageId = lastSentMessageObj?.messageId ?: ""
+                onMessageSent?.invoke(messageId)  // Use empty string as fallback
 
                 // Vibrate on message sent
-                VibrationUtils.vibrate(context, 200)
+                // VibrationUtils.vibrate(context, 200)
 
                 // Clear the sent message to prevent re-sending
-                lastSentMessage = ""
+                lastSentMessageObj = null
 
                 // Switch to receive mode automatically
                 switchToReceiveMode()
-
+                
                 // Notify that chunk transfer is completed
                 onChunkTransferCompleted?.invoke()
             }
@@ -232,27 +238,28 @@ class TransferManager(private val context: Activity) {
         return appState
     }
 
-    /** Set the last sent message */
+    /** Set the last sent Message object */
+    fun setLastSentMessageObj(message: MessageAdapter.Message) {
+        lastSentMessageObj = message
+        // Use the new method that passes the full message object
+        setMessageObjToSend(message)
+    }
+
+    /**
+     * Legacy method to set the last sent message as a string
+     * @deprecated Use setLastSentMessageObj instead
+     */
     fun setLastSentMessage(message: String) {
-        lastSentMessage = message
-        
-        // Set the message in our NdefProcessor
-        // ndefProcessor.setMessageToSend(message)
-        
-        // Also set the message in the CardEmulationService's NdefProcessor
-        // CardEmulationService.instance?.ndefProcessor?.setMessageToSend(message)
-        setMessageToSend(message)
-        // Also set the write mode based on current state
-        // ndefProcessor.setWriteMode(appState == AppState.SENDING)
-        // CardEmulationService.instance?.ndefProcessor?.setWriteMode(appState == AppState.SENDING)
+        // Create a temporary Message object
+        val tempMessage = MessageAdapter.Message(message, true)
+        setLastSentMessageObj(tempMessage)
     }
 
     /** Clear the last sent message */
-    fun clearLastSentMessage() {
-        lastSentMessage = ""
+    fun clearMessageToSend() {
+        lastSentMessageObj = null
         setMessageToSend("")
         ndefProcessor.setMessageToSend("")
-        
     }
 
     /** Toggle between send and receive modes */
@@ -264,7 +271,7 @@ class TransferManager(private val context: Activity) {
             }
             AppState.RECEIVING -> {
                 // If in receive mode, try to switch to send mode if there's a pending message
-                if (lastSentMessage.isNotEmpty()) {
+                if (lastSentMessageObj != null) {
                     switchToSendMode()
                 } else {
                     // No pending message to send
@@ -287,7 +294,7 @@ class TransferManager(private val context: Activity) {
     fun switchToSendMode() {
         Log.d(TAG, "switchToSendMode: Switching to send mode")
         // Only proceed if there's a message to send
-        if (lastSentMessage.isEmpty()) {
+        if (lastSentMessageObj == null) {
             Log.d(TAG, "No message to send, not switching to send mode")
             return
         }
@@ -305,22 +312,13 @@ class TransferManager(private val context: Activity) {
         onAppStateChanged?.invoke(appState)
         onStatusChanged?.invoke(context.getString(R.string.status_send_mode))
 
-        // Set current message on the service
-        // setCardEmulationMessage(lastSentMessage)
-
-        // Configure NdefProcessor for write mode
-        // ndefProcessor.setWriteMode(true)
-        setMessageToSend(lastSentMessage)
-        // ndefProcessor.setMessageToSend(lastSentMessage)
-        
-        // // Also set the CardEmulationService's NdefProcessor if available
-        // CardEmulationService.instance?.ndefProcessor?.setWriteMode(true)
-        // CardEmulationService.instance?.ndefProcessor?.setMessageToSend(lastSentMessage)
+        // Configure NdefProcessor for write mode and set message
+        lastSentMessageObj?.let { setMessageObjToSend(it) }
 
         // Enable reader mode for sending data
         enableReaderModeForWriting()
 
-        Log.d(TAG, "Switched to send mode, ready to send: $lastSentMessage")
+        Log.d(TAG, "Switched to send mode, ready to send: ${lastSentMessageObj?.content}")
     }
 
     /** Switch to receive mode */
@@ -447,13 +445,16 @@ class TransferManager(private val context: Activity) {
             }
         }
 
-        // Only setup the message to be shared if we're in send mode or if it was already set before
-        if (CardEmulationService.instance?.messageToShare != null) {
+        // Only setup the message to be shared if we're in send mode or if a message is ready
+        CardEmulationService.instance?.let { service ->
             // If in sending mode and we have a message, set it
-            if (appState == AppState.SENDING && lastSentMessage.isNotEmpty()) {
-                setMessageToSend(lastSentMessage)
+            if (appState == AppState.SENDING && lastSentMessageObj != null) {
+                lastSentMessageObj?.let { service.setMessageObject(it) }
             }
         }
+
+        // Set up the onMessageSent callback
+        setupCardEmulationServiceCallbacks()
 
         Log.d(TAG, "setupDataReceiver: NDEF data receiver setup complete")
     }
@@ -493,20 +494,8 @@ class TransferManager(private val context: Activity) {
                 }
             }
 
-            // Ensure write mode is set correctly based on current state
-            // setWriteMode(appState == AppState.SENDING)
-            if (lastSentMessage.isNotEmpty()) {
-                setMessageToSend(lastSentMessage)
-            } else {
-                setMessageToSend("")
-            }
-            // If in sending mode and we have a message, set it
-            // if (appState == AppState.SENDING && lastSentMessage.isNotEmpty()) {
-            //     setMessageToSend(lastSentMessage)
-            // } else {
-            //     // Ensure it's clear when in receive mode
-            //     setMessageToSend(lastSentMessage)
-            // }
+            // If we have a message object, set it
+            lastSentMessageObj?.let { setMessageObj(it) }
         }
 
         Log.d(TAG, "private setupDataReceiver: NDEF data receiver setup complete")
@@ -571,7 +560,7 @@ class TransferManager(private val context: Activity) {
                         chunkwiseTransferManager.handleChunkedMessageSending(isoDep)
                     } else {
                         // Check if the message is too long and needs to be chunked
-                        val message = lastSentMessage
+                        val message = lastSentMessageObj?.content ?: ""
                         if (chunkwiseTransferManager.needsChunkedTransfer(message)) {
                             // Prepare for chunked sending
                             chunkwiseTransferManager.prepareChunkedMessageSending(message)
@@ -605,45 +594,6 @@ class TransferManager(private val context: Activity) {
         }
     }
 
-    // /** Request data from an NFC tag */
-    // private fun requestDataFromTag(isoDep: IsoDep) {
-    //     Log.d(TAG, "requestDataFromTag: Requesting data from tag")
-    //     val getCommand = NfcProtocol.createGetDataCommand()
-    //     val getResult = isoDep.transceive(getCommand)
-
-    //     if (NfcProtocol.isSuccess(getResult)) {
-    //         Log.d(TAG, "requestDataFromTag: Data received from tag")
-    //         // Extract the data (remove the status word)
-    //         val dataBytes = getResult.copyOfRange(0, getResult.size - 2)
-    //         val receivedMessage = String(dataBytes, Charset.forName("UTF-8"))
-    //         Log.d(TAG, "requestDataFromTag: Received message: $receivedMessage")
-
-    //         // Parse the JSON message
-    //         val messageData = MessageData.fromJson(receivedMessage)
-
-    //         if (messageData != null) {
-    //             // Check if this is a duplicate message based on ID
-    //             if (messageData.id != lastReceivedMessageId) {
-    //                 lastReceivedMessageId = messageData.id
-
-    //                 context.runOnUiThread {
-    //                     // Notify that a message was received
-    //                     onMessageReceived?.invoke(messageData, false)
-    //                     onStatusChanged?.invoke(context.getString(R.string.status_receive_mode))
-
-    //                     // Vibrate on message received
-    //                     VibrationUtils.vibrate(context, 200)
-    //                 }
-    //             } else {
-    //                 Log.d(TAG, "Duplicate message received (same ID), ignoring: ${messageData.id}")
-    //                 // Don't update UI or vibrate for duplicate messages
-    //             }
-    //         } else {
-    //             Log.e(TAG, "Failed to parse message data: $receivedMessage")
-    //         }
-    //     }
-    // }
-
     /** Send a regular (non-chunked) message */
     private fun sendRegularMessage(isoDep: IsoDep, message: String) {
         Log.d(TAG, "sendRegularMessage: Sending regular message")
@@ -664,16 +614,21 @@ class TransferManager(private val context: Activity) {
                     onStatusChanged?.invoke(context.getString(R.string.message_sent))
 
                     // Notify that the message was sent
-                    onMessageSent?.invoke(-1) // -1 indicates the last message
+                    lastSentMessageObj?.let { 
+                        onMessageSent?.invoke(it.messageId)
+                    } ?: onMessageSent?.invoke("")  // Fallback if no message object
 
                     // Vibrate on message sent
-                    VibrationUtils.vibrate(context, 200)
+                    // VibrationUtils.vibrate(context, 200)
 
                     // Clear the sent message to prevent re-sending
-                    lastSentMessage = ""
+                    clearMessageToSend()
 
                     // Switch to receive mode automatically
                     switchToReceiveMode()
+                    
+                    // Notify that chunk transfer is completed
+                    onChunkTransferCompleted?.invoke()
                 }
             } else {
                 // If we're already in retry mode, just log the failure and wait for retry timeout
@@ -828,7 +783,14 @@ class TransferManager(private val context: Activity) {
 
     /** Set the current message for the CardEmulationService */
     fun setCardEmulationMessage(message: String) {
-        CardEmulationService.instance?.messageToShare = message
+        // Create a temporary Message object
+        val tempMessage = MessageAdapter.Message(message, true)
+        setCardEmulationMessageObj(tempMessage)
+    }
+
+    /** Set the current Message object for the CardEmulationService */
+    fun setCardEmulationMessageObj(message: MessageAdapter.Message) {
+        CardEmulationService.instance?.setMessageObject(message)
     }
 
     /** Check if the transfer manager is retrying a transfer */
@@ -945,6 +907,62 @@ class TransferManager(private val context: Activity) {
             } catch (e: IllegalStateException) {
                 Log.e(TAG, "Error disabling foreground dispatch", e)
             }
+        }
+    }
+
+    /**
+     * Set up CardEmulationService callbacks
+     */
+    private fun setupCardEmulationServiceCallbacks() {
+        CardEmulationService.instance?.onMessageSent = { messageId ->
+            onMessageSent?.invoke(messageId)
+        }
+    }
+
+    /**
+     * Set up NdefProcessor callbacks
+     */
+    private fun setupNdefProcessor() {
+        // Set the onMessageSent callback to forward to our callback
+        ndefProcessor.onMessageSent = { messageId ->
+            if (messageId.isNotEmpty()) {
+                onMessageSent?.invoke(messageId)
+            }
+        }
+    }
+
+    /** Set the Message object to send */
+    private fun setMessageObjToSend(message: MessageAdapter.Message) {
+        Log.d(TAG, "setMessageObjToSend: Setting message object to send: ${message.content}")
+        // Set the message in the service with the full message object
+        CardEmulationService.instance?.let {
+            if (it::class.java.methods.any { method -> method.name == "setMessageObject" }) {
+                it.setMessageObject(message)
+            } else {
+                // Fallback if the method doesn't exist
+                it.setMessageToSend(message.content)
+            }
+        }
+        
+        // Also set the message in the NdefProcessor with the full message object
+        ndefProcessor.setMessageObj(message)
+        
+        // Tell the chunkwise manager about the message object too
+        chunkwiseTransferManager.setCurrentMessage(message)
+    }
+
+    /** Set up service lifecycle receiver to handle events from CardEmulationService */
+    private fun setupServiceLifecycleReceiver() {
+        // Register for service lifecycle events
+        val serviceFilter = IntentFilter().apply {
+            addAction(CardEmulationService.ACTION_SERVICE_DESTROYED)
+            addAction(CardEmulationService.ACTION_SERVICE_STARTED)
+        }
+        
+        try {
+            context.registerReceiver(serviceLifecycleReceiver, serviceFilter, Context.RECEIVER_NOT_EXPORTED)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error registering service lifecycle receiver: ${e.message}")
         }
     }
 

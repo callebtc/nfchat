@@ -306,10 +306,17 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
 
             // Store the message to send
             lastSentMessage = etMessage.text.toString()
-            transferManager.setLastSentMessage(lastSentMessage)
-
+            
             // Add the message to the chat as a sent message and save to database
-            saveAndAddMessage(lastSentMessage, true)
+            val position = saveAndAddMessage(lastSentMessage, true)
+            
+            // Get the message object and set it in the transfer manager
+            if (position >= 0) {
+                val messageObj = messageAdapter.getItem(position)
+                transferManager.setLastSentMessageObj(messageObj)
+            } else {
+                transferManager.setLastSentMessage(lastSentMessage)
+            }
 
             // Clear the input field after sending
             etMessage.text.clear()
@@ -341,10 +348,11 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
 
         transferManager.onStatusChanged = { status -> tvStatus.text = status }
 
-        transferManager.onMessageSent = { position ->
-            // Mark the message as delivered
-            val lastPosition = if (position == -1) messageAdapter.itemCount - 1 else position
-            messageAdapter.markMessageAsDelivered(lastPosition)
+        transferManager.onMessageSent = { messageId ->
+            // Find the message by its messageId and mark it as delivered
+            if (!messageId.isNullOrEmpty()) {
+                messageAdapter.markMessageAsDeliveredById(messageId)
+            }
 
             // Check if we should close the app after sending a shared message
             val shouldClose = intentManager.handlePostSendActions()
@@ -355,6 +363,12 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
                 // Scroll to bottom
                 scrollToBottom()
             }
+
+            // clear the message to be sent
+            transferManager.clearMessageToSend()
+
+            // vibrate on message sent
+            VibrationUtils.vibrate(this, 200)
         }
 
         transferManager.onMessageReceived = { messageData, _ ->
@@ -640,5 +654,12 @@ class MainActivity : Activity(), ReaderCallback, IntentManager.MessageSaveCallba
         Log.d(TAG, "MainActivity onTagDiscovered")
         // Delegate to the transfer manager
         transferManager.handleTagDiscovered(tag)
+    }
+
+    /**
+     * Get the message adapter (used by TransferManager and other components)
+     */
+    fun getMessageAdapter(): MessageAdapter {
+        return messageAdapter
     }
 }
