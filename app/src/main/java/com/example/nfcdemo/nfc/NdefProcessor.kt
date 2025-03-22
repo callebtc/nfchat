@@ -383,7 +383,6 @@ class NdefProcessor {
         var totalLength = 0
         // Detect framing:
         
-        Log.d(TAG, "Type 2 style NDEF TLV")
         // Type 2: starts with TLV tag 0x03 followed by one byte length
         // Type 4: first two bytes form the NDEF file length
         if (ndefData.isNotEmpty() && ndefData[0] == 0x03.toByte()) {
@@ -401,13 +400,11 @@ class NdefProcessor {
             Log.e(TAG, "Invalid NDEF data")
             return
         }
-        Log.d(TAG, "Offset: $offset, Total Length: $totalLength")
     
         try {
             // Read record header starting at offset
             val header = ndefData[offset]
             val typeLength = ndefData[offset + 1].toInt() and 0xFF
-            Log.d(TAG, "Type length: $typeLength")
             // Determine payload length field size based on the SR flag (0x10)
             var payloadLength = 0
             var typeFieldStart: Int
@@ -422,7 +419,6 @@ class NdefProcessor {
                         (ndefData[offset + 5].toInt() and 0xFF)
                 typeFieldStart = offset + 6
             }
-            Log.d(TAG, "Type field start: $typeFieldStart")
             // Verify the record type is "T" (0x54) for a Text record
             if (ndefData[typeFieldStart] != 0x54.toByte()) {
                 Log.d(TAG, "NDEF message is not a Text Record. Found type: ${ndefData[typeFieldStart].toChar()}")
@@ -442,7 +438,6 @@ class NdefProcessor {
             val languageCodeLength = status.toInt() and 0x3F
             val textStart = payloadStart + 1 + languageCodeLength
             val textLength = payloadLength - 1 - languageCodeLength
-            Log.d(TAG, "Text start: $textStart, Text length: $textLength")
 
             if (textStart + textLength > ndefData.size) {
                 Log.e(TAG, "Text extraction bounds exceed data size.")
