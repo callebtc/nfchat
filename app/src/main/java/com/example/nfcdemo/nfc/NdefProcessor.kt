@@ -254,6 +254,8 @@ class NdefProcessor {
                 processReceivedNdefMessage(ndefData)
                 // clear the message
                 ndefData.fill(0)
+                // clear the selected file
+                selectedFile = null
             }
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing received NDEF message: ${e.message}")

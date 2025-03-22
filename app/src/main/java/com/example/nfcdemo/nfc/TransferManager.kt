@@ -279,7 +279,7 @@ class TransferManager(private val context: Activity) {
             }
         }
     }
-
+    
     /** Switch to send mode */
     fun switchToSendMode() {
         Log.d(TAG, "switchToSendMode: Switching to send mode")
