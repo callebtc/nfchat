@@ -190,27 +190,29 @@ class NdefProcessor {
 
     /** Create an NDEF message from a string */
     private fun createNdefMessage(message: String): ByteArray {
-        val payload = message.toByteArray()
-        val language = byteArrayOf(0x02) + "en".toByteArray()
-        val payloadLength = payload.size + language.size
+        val languageCode = "en".toByteArray(Charsets.US_ASCII)
+        val textBytes = message.toByteArray(Charsets.UTF_8)
+        val statusByte = languageCode.size.toByte() // UTF-8 + language length
+        val payload = byteArrayOf(statusByte, *languageCode, *textBytes)
+
         val type = "T".toByteArray()
-        val typeLength = type.size
-        val ndefLength = 3 + typeLength + payloadLength
-        val ndefData =
-                byteArrayOf(
-                        0x00,
-                        ndefLength.toByte(), // NDEF length
-                        0xD1.toByte(), // NDEF record header
-                        typeLength.toByte(), // type length
-                        payloadLength.toByte(), // payload length
-                        *type, // 'T'
-                        *language, // "en"
-                        *payload // message
-                )
-        Log.d(TAG, "NdefProcessor: Created NDEF message: ${byteArrayToHex(ndefData)}")
-        return ndefData
+        val recordHeader = byteArrayOf(
+            0xD1.toByte(), // MB + ME + SR + TNF=1 (well-known)
+            type.size.toByte(),
+            payload.size.toByte(),
+            *type,
+            *payload
+        )
+
+        val ndefLength = payload.size + 3 + type.size
+        val fullMessage = byteArrayOf(
+            (ndefLength shr 8).toByte(),
+            (ndefLength and 0xFF).toByte(),
+            *recordHeader
+        )
+
+        return fullMessage
     }
-    
     /** Processes an APDU command and returns the appropriate response */
     fun processCommandApdu(commandApdu: ByteArray): ByteArray {
         // When not in write mode, act as if the tag doesn't exist by returning error for all commands
@@ -413,7 +415,6 @@ class NdefProcessor {
                 typeFieldStart = offset + 3
             } else { // Normal record: payload length is 4 bytes
                 payloadLength = ((ndefData[offset + 2].toInt() and 0xFF) shl 24) or
-                Log.e(TAG, "Payload start index out of bounds")
                         ((ndefData[offset + 3].toInt() and 0xFF) shl 16) or
                         ((ndefData[offset + 4].toInt() and 0xFF) shl 8) or
                         (ndefData[offset + 5].toInt() and 0xFF)
@@ -421,14 +422,14 @@ class NdefProcessor {
             }
             // Verify the record type is "T" (0x54) for a Text record
             if (ndefData[typeFieldStart] != 0x54.toByte()) {
-                Log.d(TAG, "NDEF message is not a Text Record. Found type: ${ndefData[typeFieldStart].toChar()}")
+                Log.d(TAG, "NDEF message is not a Text Record. Found type: ${ndefData[typeFieldStart].toChar()}, returning")
                 return
             }
 
             // Payload starts immediately after the type field
             val payloadStart = typeFieldStart + typeLength
             if (payloadStart >= ndefData.size) {
-                Log.e(TAG, "Payload start index out of bounds")
+                Log.e(TAG, "Payload start index out of bounds, returning")
                 return
             }
     
