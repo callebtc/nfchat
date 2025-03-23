@@ -418,7 +418,7 @@ class CardEmulationService : HostApduService() {
         }
 
         // If not an NDEF command, process as a regular NFC command
-        Log.d(TAG, "Not an NDEF command, processing as regular NFC command")
+        Log.d(TAG, "Not an NDEF command, processing as regular NFC command: ${NfcProtocol.byteArrayToHex(commandApdu)}")
         // Check if this is a SELECT AID command
         if (isSelectAidCommand(commandApdu)) {
             Log.d(TAG, "Received SELECT AID command")

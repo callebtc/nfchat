@@ -247,7 +247,7 @@ class NdefProcessor {
         if (commandApdu.size >= 2 &&
                         Arrays.equals(commandApdu.sliceArray(0 until 2), NDEF_UPDATE_BINARY_HEADER)
         ) {
-            Log.d(TAG, "NdefProcessor: UPDATE BINARY command received")
+            Log.d(TAG, "NdefProcessor: UPDATE BINARY command received: ${byteArrayToHex(commandApdu)}")
             return handleUpdateBinary(commandApdu)
         }
 
@@ -310,12 +310,18 @@ class NdefProcessor {
 
     /** Handles UPDATE BINARY commands (00 D6 offset_MSB offset_LSB length data...) */
     private fun handleUpdateBinary(apdu: ByteArray): ByteArray {
-        if (selectedFile == null || apdu.size < 5) return NDEF_RESPONSE_ERROR
+        if (selectedFile == null || apdu.size < 5) {
+            Log.e(TAG, "UPDATE BINARY selectedFile is null or apdu.size < 5")
+            return NDEF_RESPONSE_ERROR
+        }
 
         val offset = ((apdu[2].toInt() and 0xFF) shl 8) or (apdu[3].toInt() and 0xFF)
         val dataLength = (apdu[4].toInt() and 0xFF)
 
-        if (apdu.size < 5 + dataLength) return NDEF_RESPONSE_ERROR
+        if (apdu.size < 5 + dataLength) {
+            Log.e(TAG, "UPDATE BINARY apdu.size < 5 + dataLength")
+            return NDEF_RESPONSE_ERROR
+        }
 
         // Cannot write to CC file
         if (selectedFile!!.contentEquals(CC_FILE)) {
@@ -326,7 +332,10 @@ class NdefProcessor {
         val data = apdu.sliceArray(5 until 5 + dataLength)
 
         // Prevent overflow
-        if (offset + dataLength > ndefData.size) return NDEF_RESPONSE_ERROR
+        if (offset + dataLength > ndefData.size) {
+            Log.e(TAG, "UPDATE BINARY command would overflow NDEF data buffer")
+            return NDEF_RESPONSE_ERROR
+        }
 
         
         Log.d(
@@ -348,17 +357,11 @@ class NdefProcessor {
             // If we have the complete message already
             if (ndefLength + 2 <= ndefData.size) { 
                 try {
-                    // Log.d(TAG, "NdefProcessor: Processing received NDEF message")
-                    // ndef data in string: 
-                    // Log.d(TAG, "NdefProcessor: NDEF data: ${String(ndefData)}")
                     processReceivedNdefMessage(ndefData)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error processing received NDEF message: ${e.message}")
                 }
-                // clear the message
-                ndefData.fill(0)
-                // clear the selected file
-                selectedFile = null
+                
             } else {
                 Log.d(TAG, "NdefProcessor: Not all data received, waiting for more")
             }
