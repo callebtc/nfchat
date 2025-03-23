@@ -10,7 +10,6 @@ import android.content.IntentFilter
 import android.nfc.NfcAdapter
 import android.nfc.NfcAdapter.ReaderCallback
 import android.nfc.Tag
-import android.nfc.tech.IsoDep
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler

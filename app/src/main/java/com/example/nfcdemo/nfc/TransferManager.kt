@@ -513,7 +513,13 @@ class TransferManager(private val context: Activity) {
         nfcAdapter?.enableReaderMode(
                 context,
                 { tag -> handleTagDiscovered(tag) },
-                NfcAdapter.FLAG_READER_NFC_A,
+                NfcAdapter.FLAG_READER_NFC_A or
+                NfcAdapter.FLAG_READER_NFC_B or
+                NfcAdapter.FLAG_READER_NFC_F or
+                NfcAdapter.FLAG_READER_NFC_V or
+                NfcAdapter.FLAG_READER_NFC_BARCODE or 
+                NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK or
+                NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS,
                 null
         )
     }
@@ -596,7 +602,7 @@ class TransferManager(private val context: Activity) {
 
     /** Send a regular (non-chunked) message */
     private fun sendRegularMessage(isoDep: IsoDep, message: String) {
-        Log.d(TAG, "sendRegularMessage: Sending regular message")
+        Log.d(TAG, "sendRegularMessage: Sending regular message: $message")
         try {
             // Create a MessageData object with the message content and a unique ID
             val messageData = MessageData(message)
